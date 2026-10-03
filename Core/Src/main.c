@@ -34,6 +34,7 @@
 #include "main.h"
 #include "ili9341.h"
 #include "gfx01m2_conf.h"
+#include "imported_images.h"
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
@@ -165,6 +166,8 @@ static void Demo_Shapes(void)
   }
 
   ILI9341_DrawImage(50, 50, 100, 100, (image_pixel_t*)&translucent_shape);
+
+  ILI9341_DrawImage(50, 150, IMG_RICKROLL_WIDTH, IMG_RICKROLL_HEIGHT, (image_pixel_t*)&IMG_RICKROLL);
 }
 
 /**
