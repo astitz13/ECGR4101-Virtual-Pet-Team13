@@ -35,6 +35,7 @@
 #include "ili9341.h"
 #include "gfx01m2_conf.h"
 #include "imported_images.h"
+#include "sensors.h"
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
@@ -85,6 +86,8 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_SPI1_Init();
+
+  initSensors();
 
   /* Initialize the LCD and show a splash screen */
   ILI9341_Init(&hspi1);
