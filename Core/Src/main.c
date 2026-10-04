@@ -34,6 +34,7 @@
 #include "main.h"
 #include "ili9341.h"
 #include "gfx01m2_conf.h"
+#include "imported_images.h"
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
@@ -131,6 +132,7 @@ static void Demo_ColorBars(void)
   }
 }
 
+static image_pixel_t translucent_shape[100][100];
 /**
   * @brief  Draws a handful of filled and outlined shapes.
   */
@@ -147,6 +149,25 @@ static void Demo_Shapes(void)
 
   ILI9341_FillRect(70, 220, 100, 40, ILI9341_COLOR_BLUE);
   ILI9341_DrawRect(65, 215, 110, 50, ILI9341_COLOR_WHITE);
+
+  ILI9341_DrawRect(50, 50, 100, 100, ILI9341_COLOR_WHITE);
+
+  for (uint16_t row = 0; row < 100; row++) {
+    for (uint16_t col = 0; col < 100; col++) {
+      image_pixel_t curr_px;
+      curr_px.color = ILI9341_COLOR_ORANGE;
+      if (row > 33 && row < 67 && col > 33 && col < 67) {
+        curr_px.alpha = 0;
+      } else {
+        curr_px.alpha = 100;
+      }
+      translucent_shape[row][col] = curr_px;
+    }
+  }
+
+  ILI9341_DrawImage(50, 50, 100, 100, (image_pixel_t*)&translucent_shape);
+
+  ILI9341_DrawImage(50, 150, IMG_RICKROLL_WIDTH, IMG_RICKROLL_HEIGHT, (image_pixel_t*)&IMG_RICKROLL);
 }
 
 /**

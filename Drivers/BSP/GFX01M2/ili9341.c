@@ -40,6 +40,8 @@ static SPI_HandleTypeDef *ili9341_hspi;
 static void LCD_CS_Low(void)  { HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET); }
 static void LCD_CS_High(void) { HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET); }
 
+static uint16_t ILI9341_IMG_BUFFER[ILI9341_HEIGHT][ILI9341_WIDTH];
+
 static void LCD_WriteCommand(uint8_t cmd)
 {
     HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_RESET);
@@ -76,6 +78,10 @@ static void LCD_SetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t
     LCD_WriteData(buf, 4);
 
     LCD_WriteCommand(ILI9341_CMD_RAMWR);
+}
+
+static inline uint16_t swap_endianness(uint16_t input) {
+    return (input >> 8) | ((input & 0xFF) << 8);
 }
 
 void ILI9341_Init(SPI_HandleTypeDef *hspi)
@@ -125,12 +131,8 @@ void ILI9341_Init(SPI_HandleTypeDef *hspi)
 
 void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 {
-    /* static: avoids re-reserving 480 bytes on the stack on every call - this
-     * project's stack is only 1KB, and DrawChar/DrawString call FillRect
-     * through extra nested frames that a stack-local buffer here would risk
-     * overflowing (worse for text than the shallower color-bar fill calls). */
-    static uint8_t row_buf[ILI9341_WIDTH * 2];
     uint16_t row, i;
+    uint8_t *row_buf = (uint8_t*)&ILI9341_IMG_BUFFER[y][x];
 
     if ((x >= ILI9341_WIDTH) || (y >= ILI9341_HEIGHT))
     {
@@ -139,10 +141,10 @@ void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c
     if ((uint32_t)(x + w) > ILI9341_WIDTH)  { w = ILI9341_WIDTH - x; }
     if ((uint32_t)(y + h) > ILI9341_HEIGHT) { h = ILI9341_HEIGHT - y; }
 
-    for (i = 0; i < w; i++)
-    {
-        row_buf[2 * i]     = (uint8_t)(color >> 8);
-        row_buf[2 * i + 1] = (uint8_t)(color & 0xFF);
+    for (row = 0; row < h; row++) {
+        for (i = 0; i < w; i++) {
+            ILI9341_IMG_BUFFER[y + row][x + i] = swap_endianness(color);
+        }
     }
 
     LCD_SetAddressWindow(x, y, x + w - 1, y + h - 1);
@@ -151,6 +153,52 @@ void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c
     LCD_CS_Low();
     for (row = 0; row < h; row++)
     {
+        HAL_SPI_Transmit(ili9341_hspi, row_buf, (uint16_t)(w * 2), HAL_MAX_DELAY);
+    }
+    LCD_CS_High();
+}
+
+static uint16_t merge_colors(uint16_t x, uint16_t y, image_pixel_t *pixel) {
+    if (pixel->alpha == 255) {
+        return swap_endianness(pixel->color);
+    }
+
+    float alpha_ratio = pixel->alpha / 255.0f;
+    uint16_t current_color = swap_endianness(ILI9341_IMG_BUFFER[y][x]);
+    uint16_t new_color;
+    new_color = (uint16_t)((current_color & 0x1F) * (1 - alpha_ratio) + (pixel->color & 0x1F) * (alpha_ratio)) & 0x1F;
+    new_color |= ((uint16_t)(((current_color >> 5) & 0x3F) * (1 - alpha_ratio) + ((pixel->color >> 5) & 0x3F) * (alpha_ratio)) & 0x3F) << 5;
+    new_color |= ((uint16_t)((current_color >> 11) * (1 - alpha_ratio) + (pixel->color >> 11) * (alpha_ratio)) & 0x1F) << 11;
+    return swap_endianness(new_color);
+}
+
+void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pixel_t *pixels)
+{
+    uint16_t row, i;
+    uint16_t image_width = w;
+
+    if ((x >= ILI9341_WIDTH) || (y >= ILI9341_HEIGHT))
+    {
+        return;
+    }
+    if ((uint32_t)(x + w) > ILI9341_WIDTH)  { w = ILI9341_WIDTH - x; }
+    if ((uint32_t)(y + h) > ILI9341_HEIGHT) { h = ILI9341_HEIGHT - y; }
+
+    for (row = 0; row < h; row++) {
+        for (i = 0; i < w; i++) {
+            image_pixel_t *curr_px = pixels + row * image_width + i;
+            if (curr_px->alpha == 0) continue;
+            ILI9341_IMG_BUFFER[y + row][x + i] = merge_colors(x + i, y + row, curr_px);
+        }
+    }
+
+    LCD_SetAddressWindow(x, y, x + w - 1, y + h - 1);
+
+    HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_SET);
+    LCD_CS_Low();
+    for (row = 0; row < h; row++)
+    {
+        uint8_t *row_buf = (uint8_t*)&ILI9341_IMG_BUFFER[y + row][x];
         HAL_SPI_Transmit(ili9341_hspi, row_buf, (uint16_t)(w * 2), HAL_MAX_DELAY);
     }
     LCD_CS_High();
