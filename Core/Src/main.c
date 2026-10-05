@@ -35,6 +35,7 @@
 #include "ili9341.h"
 #include "gfx01m2_conf.h"
 #include "imported_images.h"
+#include "mpu6050.h"
 #include "sensors.h"
 
 /* Private variables ---------------------------------------------------------*/
@@ -98,7 +99,9 @@ int main(void)
   /* Infinite loop: cycle through the demo pages */
   while (1)
   {
-    Demo_ColorBars();
+    MPU6050_data_t sensor_data;
+    MPU6050_getParsedData(&sensor_data);
+    /*Demo_ColorBars();
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
     HAL_Delay(1500);
 
@@ -111,7 +114,7 @@ int main(void)
     HAL_Delay(1500);
 
     Demo_Joystick();
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);*/
   }
 }
 

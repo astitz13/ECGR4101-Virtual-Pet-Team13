@@ -53,7 +53,8 @@ void MPU6050_init() {
 
 void MPU6050_getData(MPU6050_data_raw_t *data) {
     uint8_t buf[14];
-    MPU6050_readBytes(MPU6050_ACCEL_XOUT_H, 14, (uint8_t*)&buf);
+    MPU6050_readBytes(MPU6050_WHO_AM_I, 14, (uint8_t*)buf);
+    MPU6050_readBytes(MPU6050_ACCEL_XOUT_H, 14, (uint8_t*)buf);
 
     data->acc_x = (buf[0] << 8) | buf[1];
     data->acc_y = (buf[2] << 8) | buf[3];
@@ -67,13 +68,13 @@ void MPU6050_getData(MPU6050_data_raw_t *data) {
 void MPU6050_getParsedData(MPU6050_data_t *data) {
     MPU6050_data_raw_t temp;
     MPU6050_getData(&temp);
-    data->acc_x = temp.acc_x / 16384.0f; // LSB sensitivity from datasheet
-    data->acc_y = temp.acc_y / 16384.0f;
-    data->acc_z = temp.acc_z / 16384.0f;
-    data->temperature = temp.temperature / 340.0f + 36.53f;
-    data->gyro_x = temp.gyro_x / 131.0f;
-    data->gyro_y = temp.gyro_x / 131.0f;
-    data->gyro_z = temp.gyro_x / 131.0f;
+    data->acc_x = (int16_t)temp.acc_x / 16384.0f; // LSB sensitivity from datasheet
+    data->acc_y = (int16_t)temp.acc_y / 16384.0f;
+    data->acc_z = (int16_t)temp.acc_z / 16384.0f;
+    data->temperature = (int16_t)temp.temperature / 340.0f + 36.53f;
+    data->gyro_x = (int16_t)temp.gyro_x / 131.0f;
+    data->gyro_y = (int16_t)temp.gyro_y / 131.0f;
+    data->gyro_z = (int16_t)temp.gyro_z / 131.0f;
 }
 
 bool MPU6050_getDataReady() {
@@ -98,10 +99,10 @@ void I2C_Init() {
 void HAL_I2C_MspInit(I2C_HandleTypeDef* i2cHandle) {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     if(i2cHandle->Instance == I2C1) {
-        __HAL_RCC_GPIOB_CLK_ENABLE();
+        __HAL_RCC_GPIOG_CLK_ENABLE();
         GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14;
         GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-        GPIO_InitStruct.Pull = GPIO_NOPULL;
+        GPIO_InitStruct.Pull = GPIO_PULLUP;
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
         GPIO_InitStruct.Alternate = GPIO_AF4_I2C1;
         HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
