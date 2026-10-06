@@ -32,6 +32,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "audio.h"
 #include "ili9341.h"
 #include "gfx01m2_conf.h"
 #include "imported_images.h"
@@ -92,6 +93,7 @@ int main(void)
   MX_SPI1_Init();
 
   initSensors();
+  MX_TIM16_Init();
 
   /* Initialize the LCD and show a splash screen */
   ILI9341_Init(&hspi1);
@@ -103,6 +105,7 @@ int main(void)
   float prevsamples[190] = {0};
 
   /* Infinite loop: cycle through the demo pages */
+  startAudio();
   while (1)
   {
     //MPU6050_data_t sensor_data;
