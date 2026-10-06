@@ -35,6 +35,11 @@
 #include "ili9341.h"
 #include "gfx01m2_conf.h"
 #include "imported_images.h"
+#include "microphone.h"
+#include "mpu6050.h"
+#include "sensors.h"
+#include "string.h"
+#include "stdio.h"
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
@@ -86,16 +91,39 @@ int main(void)
   MX_GPIO_Init();
   MX_SPI1_Init();
 
+  initSensors();
+
   /* Initialize the LCD and show a splash screen */
   ILI9341_Init(&hspi1);
   ILI9341_DrawString(18, 12, "GFX01M2 LCD DEMO", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
   ILI9341_DrawString(30, 40, "NUCLEO-L496ZG-P", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
   HAL_Delay(2000);
 
+  float samples[190] = {0};
+  float prevsamples[190] = {0};
+
   /* Infinite loop: cycle through the demo pages */
   while (1)
   {
-    Demo_ColorBars();
+    //MPU6050_data_t sensor_data;
+    //MPU6050_getParsedData(&sensor_data);
+    float test = getMicrophoneDataCentered();
+    //char testbuf[20];
+    //snprintf(testbuf, sizeof(testbuf), "VALUE: %d  ", (int)(test * 100));
+    //ILI9341_DrawString(18, 50, testbuf, ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+    ILI9341_DrawRect(25, 100, 190, 100, ILI9341_COLOR_WHITE);
+    for (int i = 1; i < 190; i++) {
+      ILI9341_DrawLine(25 + i - 1, 150 - prevsamples[i - 1], 25 + i, 150 - prevsamples[i], ILI9341_COLOR_BLACK);
+    }
+    samples[189] = test * 50;
+    for (int i = 1; i < 190; i++) {
+      ILI9341_DrawLine(25 + i - 1, 150 - samples[i - 1], 25 + i, 150 - samples[i], ILI9341_COLOR_CYAN);
+    }
+    for (int i = 1; i < 190; i++) {
+      prevsamples[i] = samples[i];
+      samples[i - 1] = samples[i];
+    }
+    /*Demo_ColorBars();
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
     HAL_Delay(1500);
 
@@ -108,7 +136,7 @@ int main(void)
     HAL_Delay(1500);
 
     Demo_Joystick();
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);*/
   }
 }
 
