@@ -2,6 +2,7 @@
 #define SENSORS_H
 
 #include "mpu6050.h"
+#include "microphone.h"
 
 void initSensors();
 
