@@ -1,25 +1,31 @@
 #include "microphone.h"
-#include "main.h"
+// Import required HAL functions and typedefs
 #include "stm32l496xx.h"
 #include "stm32l4xx_hal_def.h"
 #include "stm32l4xx_hal_gpio.h"
 #include "stm32l4xx_hal_rcc.h"
+// Importing main required for error handler
+#include "main.h"
+// Utils includes absolute value function
 #include "utils.h"
 
+// Keep track of samples
 float microphone_samples[MICROPHONE_SAMPLES];
 size_t curr_sample_idx = 0;
 
+// Handlers for ADC3 and TIM15
 ADC_HandleTypeDef hadc3;
 TIM_HandleTypeDef htim15;
 
-void initMicrophone() {
-    MX_ADC1_Init();
+// Initializes ADC and TIM15 for microphone
+void initMicrophone(void) {
+    MX_ADC3_Init();
     MX_TIM15_Init();
 }
 
-void MX_ADC1_Init(void) {
-
-
+// Initialize ADC3 on channel 6
+void MX_ADC3_Init(void) 
+{
     ADC_ChannelConfTypeDef sConfig = {0};
 
     hadc3.Instance = ADC3;
@@ -38,8 +44,7 @@ void MX_ADC1_Init(void) {
     hadc3.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
     hadc3.Init.OversamplingMode = DISABLE;
 
-    if (HAL_ADC_Init(&hadc3) != HAL_OK)
-    {
+    if (HAL_ADC_Init(&hadc3) != HAL_OK) {
         Error_Handler();
     }
 
@@ -50,43 +55,22 @@ void MX_ADC1_Init(void) {
     sConfig.OffsetNumber = ADC_OFFSET_NONE;
     sConfig.Offset = 0;
 
-    if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
-    {
+    if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK) {
         Error_Handler();
     }
 
-    if (HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED) != HAL_OK)
-    {
+    if (HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED) != HAL_OK) {
         Error_Handler();
     }
 }
 
-int getMicrophoneData() {
-    int result = -1;
-
-    HAL_ADC_Start(&hadc3);
-
-    HAL_StatusTypeDef status = HAL_ADC_PollForConversion(&hadc3, 10U);
-    if (status == HAL_OK) {
-        result = HAL_ADC_GetValue(&hadc3);
-    }
-
-    HAL_ADC_Stop(&hadc3);
-
-    return result;
-}
-
-float getMicrophoneDataCentered() {
-    int data_int = getMicrophoneData();
-
-    return (data_int - 2048.0f) / 2048.0f; // Converts 0 to 4095 to -1 to 1
-}
-
+// Init for HAL GPIO pins
 void HAL_ADC_MspInit(ADC_HandleTypeDef* adcHandle) {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     if(adcHandle->Instance == ADC3) {
         __HAL_RCC_ADC_CLK_ENABLE();
 
+        // Set PF3 to use ADC3 Channel 6
         __HAL_RCC_GPIOF_CLK_ENABLE();
         GPIO_InitStruct.Pin = GPIO_PIN_3;
         GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
@@ -95,13 +79,15 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* adcHandle) {
     }
 }
 
+// Deinit for ADC3
 void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle) {
-    if(adcHandle->Instance==ADC3) {
+    if(adcHandle->Instance == ADC3) {
         __HAL_RCC_ADC_CLK_DISABLE();
         HAL_GPIO_DeInit(GPIOF, GPIO_PIN_3);
     }
 }
 
+// Initialize TIM15 for microphone sampling
 void MX_TIM15_Init(void)
 {
     __HAL_RCC_TIM15_CLK_ENABLE();
@@ -121,20 +107,65 @@ void MX_TIM15_Init(void)
     }
 }
 
+// Callback for TIM15 to add sampled data
 void TIM15_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-  if (htim->Instance == TIM15)
-  {
-    float current_data = getMicrophoneDataCentered();
-    microphone_samples[curr_sample_idx] = current_data;
-    curr_sample_idx = (curr_sample_idx + 1) % MICROPHONE_SAMPLES;
-  }
+    if (htim->Instance == TIM15){
+        // Collect microphone data and add to circular array
+        float current_data = getMicrophoneDataCentered();
+        microphone_samples[curr_sample_idx] = current_data;
+        curr_sample_idx = (curr_sample_idx + 1) % MICROPHONE_SAMPLES;
+    }
 }
 
+// Use HAL IRQHandler for timers
+void TIM1_BRK_TIM15_IRQHandler(void)
+{
+  HAL_TIM_IRQHandler(&htim15);
+}
+
+// Get raw microphone data from ADC
+int getMicrophoneData() {
+    // Default to -1 if error
+    int result = -1;
+
+    HAL_ADC_Start(&hadc3);
+
+    HAL_StatusTypeDef status = HAL_ADC_PollForConversion(&hadc3, 10U);
+    if (status == HAL_OK) {
+        // If value available, read ADC value
+        result = HAL_ADC_GetValue(&hadc3);
+    }
+
+    HAL_ADC_Stop(&hadc3);
+
+    return result;
+}
+
+// Get microphone data adjusted to range of -1 to 1
+float getMicrophoneDataCentered() {
+    int data_int = getMicrophoneData();
+
+    return (data_int - 2048.0f) / 2048.0f; // Converts 0 to 4095 to -1 to 1
+}
+
+// Begin TIM15 to start recording
+void startRecording()
+{
+    HAL_TIM_Base_Start_IT(&htim15);
+}
+
+// Stop TIM15 to stop recording
+void stopRecording() {
+    HAL_TIM_Base_Stop_IT(&htim15);
+}
+
+// Get latest sampled value of microphone
 float getLatestMicrophoneData() {
     return microphone_samples[curr_sample_idx];
 }
 
+// Get maximum sampled value of microphone
 float getMaxMicrophoneData() {
     float maxVal = -1;
     for (size_t i = 0; i < MICROPHONE_SAMPLES; i++) {
@@ -145,6 +176,7 @@ float getMaxMicrophoneData() {
     return maxVal;
 }
 
+// Get minimum sampled value of microphone
 float getMinMicrophoneData() {
     float minVal = 1;
     for (size_t i = 0; i < MICROPHONE_SAMPLES; i++) {
@@ -155,6 +187,7 @@ float getMinMicrophoneData() {
     return minVal;
 }
 
+// Get value with largest absolute value
 float getExtremeMicrophoneData() {
     float maxVal = 1;
     for (size_t i = 0; i < MICROPHONE_SAMPLES; i++) {
@@ -165,30 +198,23 @@ float getExtremeMicrophoneData() {
     return maxVal;
 }
 
+// Copy certain number of samples to output array
+// This does flatten the circular array into a linear array ending at the current sample
 void getRecordedMicrophoneData(float *out, size_t length) {
+    // Store current sample index in case it changes due to timer interrupts while processing
     size_t idx = curr_sample_idx;
+    // Iterate through minimum of length and MICROPHONE_SAMPLES
     for (size_t i = 0; i < length && i < MICROPHONE_SAMPLES; i++) {
-        size_t tmp_idx = (idx + i) % MICROPHONE_SAMPLES;
-        out[i] = microphone_samples[tmp_idx];
+        // Start at curr_sample_idx and go back once each time, wrapping around circular array
+        size_t tmp_idx = (idx - i + MICROPHONE_SAMPLES) % MICROPHONE_SAMPLES;
+        // Add latest samples at end of output buffer and older samples at beginning
+        out[length - i - 1] = microphone_samples[tmp_idx];
     }
 }
 
+// Clear microphone samples
 void clearRecordedMicrophoneData(void) {
     for (size_t i = 0; i < MICROPHONE_SAMPLES; i++) {
         microphone_samples[i] = 0;
     }
-}
-
-void TIM1_BRK_TIM15_IRQHandler(void)
-{
-  HAL_TIM_IRQHandler(&htim15);
-}
-
-void startRecording()
-{
-    HAL_TIM_Base_Start_IT(&htim15);
-}
-
-void stopRecording() {
-    HAL_TIM_Base_Stop_IT(&htim15);
 }
