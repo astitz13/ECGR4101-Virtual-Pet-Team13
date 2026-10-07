@@ -186,7 +186,7 @@ void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c
 }
 
 // New function to draw arbitrary image based on pixel array
-void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pixel_t *pixels)
+void ILI9341_DrawImageScaled(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pixel_t *pixels, uint16_t scale)
 {
     uint16_t row, i;
     uint16_t image_width = w;
@@ -195,13 +195,15 @@ void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pix
     {
         return;
     }
+    w = w * scale;
+    h = h * scale;
     if ((uint32_t)(x + w) > ILI9341_WIDTH)  { w = ILI9341_WIDTH - x; }
     if ((uint32_t)(y + h) > ILI9341_HEIGHT) { h = ILI9341_HEIGHT - y; }
 
     // Merge colors with current display
     for (row = 0; row < h; row++) {
         for (i = 0; i < w; i++) {
-            image_pixel_t *curr_px = pixels + row * image_width + i;
+            image_pixel_t *curr_px = pixels + (row / scale) * image_width + (i / scale);
             if (curr_px->alpha == 0) continue;
             ILI9341_IMG_BUFFER[y + row][x + i] = merge_colors(x + i, y + row, curr_px);
         }
@@ -218,6 +220,12 @@ void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pix
         HAL_SPI_Transmit(ili9341_hspi, row_buf, (uint16_t)(w * 2), HAL_MAX_DELAY);
     }
     LCD_CS_High();
+}
+
+// Generalized to scale of 1x
+void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pixel_t *pixels)
+{
+    ILI9341_DrawImageScaled(x, y, w, h, pixels, 1);
 }
 
 void ILI9341_FillScreen(uint16_t color)

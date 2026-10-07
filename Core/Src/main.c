@@ -53,6 +53,7 @@ static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 
 static void Demo_ColorBars(void);
+static void Demo_Images(void);
 static void Demo_Shapes(void);
 static void Demo_Text(void);
 static void Demo_Joystick(void);
@@ -123,6 +124,10 @@ int main(void)
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
     HAL_Delay(1500);
 
+    Demo_Images();
+    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+    HAL_Delay(1500);
+
     Demo_Text();
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
     HAL_Delay(1500);
@@ -189,6 +194,15 @@ static void Demo_ColorBars(void)
   }
 }
 
+static void Demo_Images(void)
+{
+  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+  // Render full-resolution 150x100 rickroll frame
+  ILI9341_DrawImage(50, 50, IMG_RICKROLL_WIDTH, IMG_RICKROLL_HEIGHT, (image_pixel_t*)&IMG_RICKROLL);
+  // Repeat with 5x scaled 30x20 image
+  ILI9341_DrawImageScaled(50, 150, IMG_SMALL_RICKROLL_WIDTH, IMG_SMALL_RICKROLL_HEIGHT, (image_pixel_t*)&IMG_SMALL_RICKROLL, 5);
+}
+
 static image_pixel_t translucent_shape[100][100];
 /**
   * @brief  Draws a handful of filled and outlined shapes.
@@ -223,8 +237,6 @@ static void Demo_Shapes(void)
   }
 
   ILI9341_DrawImage(50, 50, 100, 100, (image_pixel_t*)&translucent_shape);
-
-  ILI9341_DrawImage(50, 150, IMG_RICKROLL_WIDTH, IMG_RICKROLL_HEIGHT, (image_pixel_t*)&IMG_RICKROLL);
 }
 
 /**

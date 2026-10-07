@@ -55,5 +55,8 @@ typedef struct {
 
 // Custom function to draw arbitrary images
 void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pixel_t *pixels);
+// Custom function to draw arbitrary images with scale
+// Note that scale should be a positive integer
+void ILI9341_DrawImageScaled(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pixel_t *pixels, uint16_t scale);
 
 #endif /* ILI9341_H */
