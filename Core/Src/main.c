@@ -35,6 +35,7 @@
 #include "audio.h"
 #include "ili9341.h"
 #include "gfx01m2_conf.h"
+#include "imported_audio.h"
 #include "imported_images.h"
 #include "microphone.h"
 #include "mpu6050.h"
@@ -93,7 +94,7 @@ int main(void)
   MX_SPI1_Init();
 
   initSensors();
-  MX_TIM16_Init();
+  initAudioTimers();
 
   /* Initialize the LCD and show a splash screen */
   ILI9341_Init(&hspi1);
@@ -105,7 +106,7 @@ int main(void)
   float prevsamples[190] = {0};
 
   /* Infinite loop: cycle through the demo pages */
-  startAudio();
+  startAudio((int8_t*)&AUDIO_PERRY, AUDIO_PERRY_SAMPLES);
   while (1)
   {
     //MPU6050_data_t sensor_data;

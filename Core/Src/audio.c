@@ -2,11 +2,22 @@
 #include "stm32l4xx_hal.h"
 #include "main.h"
 #include "stm32l4xx_hal_gpio_ex.h"
+#include "stm32l4xx_hal_tim.h"
 
 TIM_HandleTypeDef htim16;
+TIM_HandleTypeDef htim17;
+
+// Maintains state of audio playing
+int8_t *current_sample = NULL;
+size_t samples_remaining = 0;
 
 static inline int calculateDutyCycle(float dutyCycle) {
     return (int)((AUDIO_TIMER_PERIOD + 1) * dutyCycle) - 1;
+}
+
+void initAudioTimers() {
+    MX_TIM16_Init();
+    MX_TIM17_Init();
 }
 
 void MX_TIM16_Init(void)
@@ -14,7 +25,6 @@ void MX_TIM16_Init(void)
     TIM_OC_InitTypeDef sConfigOC = {0};
     TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
 
-    // 1. Base Timer Configuration
     htim16.Instance = TIM16;
     htim16.Init.Prescaler = AUDIO_TIMER_PSC;
     htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -23,15 +33,10 @@ void MX_TIM16_Init(void)
     htim16.Init.RepetitionCounter = 0;
     htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
     
-    //if (HAL_TIM_Base_Init(&htim16) != HAL_OK) {
-    //    Error_Handler();
-    //}
-    
     if (HAL_TIM_PWM_Init(&htim16) != HAL_OK) {
         Error_Handler();
     }
 
-    // 2. PWM Channel 1 Configuration
     sConfigOC.OCMode = TIM_OCMODE_PWM1;
     sConfigOC.Pulse = calculateDutyCycle(0.5);
     sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
@@ -58,13 +63,38 @@ void MX_TIM16_Init(void)
     }
 }
 
-void startAudio(void)
+void MX_TIM17_Init(void)
 {
+    __HAL_RCC_TIM17_CLK_ENABLE();
+    HAL_NVIC_SetPriority(TIM1_TRG_COM_TIM17_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(TIM1_TRG_COM_TIM17_IRQn);
+
+    htim17.Instance = TIM17;
+    htim17.Init.Prescaler = AUDIO_TIMER_SAMPLE_PSC;
+    htim17.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim17.Init.Period = AUDIO_TIMER_SAMPLE_PERIOD;
+    htim17.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    htim17.Init.RepetitionCounter = 0;
+    htim17.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+    
+    if (HAL_TIM_Base_Init(&htim17) != HAL_OK) {
+        Error_Handler();
+    }
+}
+
+void startAudio(int8_t *audio, size_t num_samples)
+{
+    current_sample = audio;
+    samples_remaining = num_samples;
     HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1);
+    HAL_TIM_Base_Start_IT(&htim17);
 }
 
 void stopAudio(void) {
+    current_sample = NULL;
+    samples_remaining = 0;
     HAL_TIM_PWM_Stop(&htim16, TIM_CHANNEL_1);
+    HAL_TIM_Base_Stop_IT(&htim17);
 }
 
 void adjustDutyCycle(float dutyCycle) {
@@ -93,4 +123,23 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* htim_pwm)
         // Initialize GPIOE Pin 0
         HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
     }
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM17)
+  {
+    if (current_sample != NULL && samples_remaining > 0) {
+        adjustDutyCycle(((int)*current_sample + 127) / 255.0f);
+        current_sample++;
+        samples_remaining--;
+    } else {
+        stopAudio();
+    }
+  }
+}
+
+void TIM1_TRG_COM_TIM17_IRQHandler(void)
+{
+  HAL_TIM_IRQHandler(&htim17); // Call HAL handler for TIM17
 }
