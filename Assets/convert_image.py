@@ -4,7 +4,7 @@ from PIL import Image
 # File name should be the relative file name from this "Assets" directory
 # Image name should be what is used to reference the image in code
 # Width and height are the dimensions of the image in pixels
-IMAGE_LIST = [("demo_rickroll.webp", "IMG_RICKROLL", 150, 100)]
+IMAGE_LIST = [("demo_rickroll.webp", "IMG_RICKROLL", 150, 100), ("demo_rickroll.webp", "IMG_SMALL_RICKROLL", 30, 20)]
 
 # Relative paths to header and C files for image import
 OUTPUT_HEADER_FILE = "../Core/Inc/imported_images.h"
