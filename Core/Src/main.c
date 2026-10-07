@@ -107,11 +107,17 @@ int main(void)
 
   /* Infinite loop: cycle through the demo pages */
   startAudio((int8_t*)&AUDIO_PERRY, AUDIO_PERRY_SAMPLES);
+  startRecording();
   while (1)
   {
     //MPU6050_data_t sensor_data;
     //MPU6050_getParsedData(&sensor_data);
-    float test = getMicrophoneDataCentered();
+    //float test = getMicrophoneDataCentered();
+    getRecordedMicrophoneData((float*)samples, 190);
+    for (int i = 0; i < 190; i++) {
+      samples[i] *= 50;
+    }
+    //float test = getLatestMicrophoneData();
     //char testbuf[20];
     //snprintf(testbuf, sizeof(testbuf), "VALUE: %d  ", (int)(test * 100));
     //ILI9341_DrawString(18, 50, testbuf, ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
@@ -119,7 +125,7 @@ int main(void)
     for (int i = 1; i < 190; i++) {
       ILI9341_DrawLine(25 + i - 1, 150 - prevsamples[i - 1], 25 + i, 150 - prevsamples[i], ILI9341_COLOR_BLACK);
     }
-    samples[189] = test * 50;
+    //samples[189] = test * 50;
     for (int i = 1; i < 190; i++) {
       ILI9341_DrawLine(25 + i - 1, 150 - samples[i - 1], 25 + i, 150 - samples[i], ILI9341_COLOR_CYAN);
     }

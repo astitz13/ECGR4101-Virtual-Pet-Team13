@@ -1,10 +1,21 @@
 #include "microphone.h"
 #include "main.h"
+#include "stm32l496xx.h"
 #include "stm32l4xx_hal_def.h"
 #include "stm32l4xx_hal_gpio.h"
 #include "stm32l4xx_hal_rcc.h"
+#include "utils.h"
+
+float microphone_samples[MICROPHONE_SAMPLES];
+size_t curr_sample_idx = 0;
 
 ADC_HandleTypeDef hadc3;
+TIM_HandleTypeDef htim15;
+
+void initMicrophone() {
+    MX_ADC1_Init();
+    MX_TIM15_Init();
+}
 
 void MX_ADC1_Init(void) {
 
@@ -89,4 +100,95 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle) {
         __HAL_RCC_ADC_CLK_DISABLE();
         HAL_GPIO_DeInit(GPIOF, GPIO_PIN_3);
     }
+}
+
+void MX_TIM15_Init(void)
+{
+    __HAL_RCC_TIM15_CLK_ENABLE();
+    HAL_NVIC_SetPriority(TIM1_BRK_TIM15_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(TIM1_BRK_TIM15_IRQn);
+
+    htim15.Instance = TIM15;
+    htim15.Init.Prescaler = MICROPHONE_TIMER_PSC;
+    htim15.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim15.Init.Period = MICROPHONE_TIMER_PERIOD;
+    htim15.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    htim15.Init.RepetitionCounter = 0;
+    htim15.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+    
+    if (HAL_TIM_Base_Init(&htim15) != HAL_OK) {
+        Error_Handler();
+    }
+}
+
+void TIM15_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM15)
+  {
+    float current_data = getMicrophoneDataCentered();
+    microphone_samples[curr_sample_idx] = current_data;
+    curr_sample_idx = (curr_sample_idx + 1) % MICROPHONE_SAMPLES;
+  }
+}
+
+float getLatestMicrophoneData() {
+    return microphone_samples[curr_sample_idx];
+}
+
+float getMaxMicrophoneData() {
+    float maxVal = -1;
+    for (size_t i = 0; i < MICROPHONE_SAMPLES; i++) {
+        if (microphone_samples[i] > maxVal) {
+            maxVal = microphone_samples[i];
+        }
+    }
+    return maxVal;
+}
+
+float getMinMicrophoneData() {
+    float minVal = 1;
+    for (size_t i = 0; i < MICROPHONE_SAMPLES; i++) {
+        if (microphone_samples[i] < minVal) {
+            minVal = microphone_samples[i];
+        }
+    }
+    return minVal;
+}
+
+float getExtremeMicrophoneData() {
+    float maxVal = 1;
+    for (size_t i = 0; i < MICROPHONE_SAMPLES; i++) {
+        if (abs(microphone_samples[i]) > abs(maxVal)) {
+            maxVal = microphone_samples[i];
+        }
+    }
+    return maxVal;
+}
+
+void getRecordedMicrophoneData(float *out, size_t length) {
+    size_t idx = curr_sample_idx;
+    for (size_t i = 0; i < length && i < MICROPHONE_SAMPLES; i++) {
+        size_t tmp_idx = (idx + i) % MICROPHONE_SAMPLES;
+        out[i] = microphone_samples[tmp_idx];
+    }
+}
+
+void clearRecordedMicrophoneData(void) {
+    for (size_t i = 0; i < MICROPHONE_SAMPLES; i++) {
+        microphone_samples[i] = 0;
+    }
+}
+
+void TIM1_BRK_TIM15_IRQHandler(void)
+{
+  HAL_TIM_IRQHandler(&htim15);
+}
+
+void startRecording()
+{
+    HAL_TIM_Base_Start_IT(&htim15);
+}
+
+void stopRecording() {
+    HAL_TIM_Base_Stop_IT(&htim15);
 }

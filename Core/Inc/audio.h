@@ -11,10 +11,11 @@
 #define AUDIO_TIMER_SAMPLE_PERIOD 99
 
 #include "stm32l4xx_hal.h"
+#include "timers_common.h"
 
 void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* htim_pwm);
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
+void TIM17_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 
 void initAudioTimers();
 

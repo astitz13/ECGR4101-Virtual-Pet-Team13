@@ -2,7 +2,7 @@
 
 void initSensors() {
     I2C_Init();
-    MX_ADC1_Init();
+    initMicrophone();
 
     MPU6050_init();
 }
