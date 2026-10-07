@@ -30,6 +30,8 @@ set(MX_Application_Src
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/microphone.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/audio.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/imported_audio.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/utils.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/timers_common.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../startup_stm32l496xx.s
 )
 
