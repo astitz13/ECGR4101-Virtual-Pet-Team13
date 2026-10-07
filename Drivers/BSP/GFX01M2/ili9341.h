@@ -47,12 +47,13 @@ void ILI9341_DrawRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c
 void ILI9341_DrawChar(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg, uint8_t size);
 void ILI9341_DrawString(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size);
 
-
+// Struct for R5G6B5 pixel data with alpha (opacity)
 typedef struct {
     uint16_t color;
     uint8_t alpha;
 } image_pixel_t;
 
+// Custom function to draw arbitrary images
 void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pixel_t *pixels);
 
 #endif /* ILI9341_H */

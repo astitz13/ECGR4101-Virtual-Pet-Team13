@@ -40,7 +40,35 @@ static SPI_HandleTypeDef *ili9341_hspi;
 static void LCD_CS_Low(void)  { HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET); }
 static void LCD_CS_High(void) { HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET); }
 
+// Stores current image data
 static uint16_t ILI9341_IMG_BUFFER[ILI9341_HEIGHT][ILI9341_WIDTH];
+
+// Helper function to swap endianness of 16-bit input
+static inline uint16_t swap_endianness(uint16_t input)
+{
+    return (input >> 8) | ((input & 0xFF) << 8);
+}
+
+// Helper function to merge color with current color at that pixel for transparency
+static uint16_t merge_colors(uint16_t x, uint16_t y, image_pixel_t *pixel)
+{
+    // If alpha is 255, fully opaque
+    if (pixel->alpha == 255) {
+        return swap_endianness(pixel->color);
+    }
+
+    // Convert alpha to float
+    float alpha_ratio = pixel->alpha / 255.0f;
+    // Get current color in normal little-endian
+    uint16_t current_color = swap_endianness(ILI9341_IMG_BUFFER[y][x]);
+    uint16_t new_color;
+    // Weighted sum all components of color
+    new_color = (uint16_t)((current_color & 0x1F) * (1 - alpha_ratio) + (pixel->color & 0x1F) * (alpha_ratio)) & 0x1F;
+    new_color |= ((uint16_t)(((current_color >> 5) & 0x3F) * (1 - alpha_ratio) + ((pixel->color >> 5) & 0x3F) * (alpha_ratio)) & 0x3F) << 5;
+    new_color |= ((uint16_t)((current_color >> 11) * (1 - alpha_ratio) + (pixel->color >> 11) * (alpha_ratio)) & 0x1F) << 11;
+    // Swap back to big-endian for use in IMG_BUFFER
+    return swap_endianness(new_color);
+}
 
 static void LCD_WriteCommand(uint8_t cmd)
 {
@@ -78,10 +106,6 @@ static void LCD_SetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t
     LCD_WriteData(buf, 4);
 
     LCD_WriteCommand(ILI9341_CMD_RAMWR);
-}
-
-static inline uint16_t swap_endianness(uint16_t input) {
-    return (input >> 8) | ((input & 0xFF) << 8);
 }
 
 void ILI9341_Init(SPI_HandleTypeDef *hspi)
@@ -132,6 +156,7 @@ void ILI9341_Init(SPI_HandleTypeDef *hspi)
 void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 {
     uint16_t row, i;
+    // Point row_buf to top left corner of rectangle IMG_BUFFER
     uint8_t *row_buf = (uint8_t*)&ILI9341_IMG_BUFFER[y][x];
 
     if ((x >= ILI9341_WIDTH) || (y >= ILI9341_HEIGHT))
@@ -141,6 +166,8 @@ void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c
     if ((uint32_t)(x + w) > ILI9341_WIDTH)  { w = ILI9341_WIDTH - x; }
     if ((uint32_t)(y + h) > ILI9341_HEIGHT) { h = ILI9341_HEIGHT - y; }
 
+    // Adjusted to use IMG_BUFFER to store current data
+    // Endianness swapped to ILI9341_IMG_BUFFER can be used as row buffer
     for (row = 0; row < h; row++) {
         for (i = 0; i < w; i++) {
             ILI9341_IMG_BUFFER[y + row][x + i] = swap_endianness(color);
@@ -158,20 +185,7 @@ void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c
     LCD_CS_High();
 }
 
-static uint16_t merge_colors(uint16_t x, uint16_t y, image_pixel_t *pixel) {
-    if (pixel->alpha == 255) {
-        return swap_endianness(pixel->color);
-    }
-
-    float alpha_ratio = pixel->alpha / 255.0f;
-    uint16_t current_color = swap_endianness(ILI9341_IMG_BUFFER[y][x]);
-    uint16_t new_color;
-    new_color = (uint16_t)((current_color & 0x1F) * (1 - alpha_ratio) + (pixel->color & 0x1F) * (alpha_ratio)) & 0x1F;
-    new_color |= ((uint16_t)(((current_color >> 5) & 0x3F) * (1 - alpha_ratio) + ((pixel->color >> 5) & 0x3F) * (alpha_ratio)) & 0x3F) << 5;
-    new_color |= ((uint16_t)((current_color >> 11) * (1 - alpha_ratio) + (pixel->color >> 11) * (alpha_ratio)) & 0x1F) << 11;
-    return swap_endianness(new_color);
-}
-
+// New function to draw arbitrary image based on pixel array
 void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pixel_t *pixels)
 {
     uint16_t row, i;
@@ -184,6 +198,7 @@ void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pix
     if ((uint32_t)(x + w) > ILI9341_WIDTH)  { w = ILI9341_WIDTH - x; }
     if ((uint32_t)(y + h) > ILI9341_HEIGHT) { h = ILI9341_HEIGHT - y; }
 
+    // Merge colors with current display
     for (row = 0; row < h; row++) {
         for (i = 0; i < w; i++) {
             image_pixel_t *curr_px = pixels + row * image_width + i;
@@ -198,6 +213,7 @@ void ILI9341_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, image_pix
     LCD_CS_Low();
     for (row = 0; row < h; row++)
     {
+        // For each iteration, use the start of the current row of the image
         uint8_t *row_buf = (uint8_t*)&ILI9341_IMG_BUFFER[y + row][x];
         HAL_SPI_Transmit(ili9341_hspi, row_buf, (uint16_t)(w * 2), HAL_MAX_DELAY);
     }

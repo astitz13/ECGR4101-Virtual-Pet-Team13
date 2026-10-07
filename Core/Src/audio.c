@@ -1,9 +1,12 @@
 #include "audio.h"
+// Import necessary HAL functions and typedefs
 #include "stm32l4xx_hal.h"
-#include "main.h"
 #include "stm32l4xx_hal_gpio_ex.h"
 #include "stm32l4xx_hal_tim.h"
+// Import main required for error handler
+#include "main.h"
 
+// Define handlers for TIM16 and TIM 17
 TIM_HandleTypeDef htim16;
 TIM_HandleTypeDef htim17;
 
@@ -11,15 +14,20 @@ TIM_HandleTypeDef htim17;
 int8_t *current_sample = NULL;
 size_t samples_remaining = 0;
 
-static inline int calculateDutyCycle(float dutyCycle) {
+// Internal inline function for calculating duty cycle
+static inline int calculateDutyCycle(float dutyCycle)
+{
     return (int)((AUDIO_TIMER_PERIOD + 1) * dutyCycle) - 1;
 }
 
-void initAudioTimers() {
+// Function to initialize both timers (TIM16 and TIM17) for audio
+void initAudioTimers(void)
+{
     MX_TIM16_Init();
     MX_TIM17_Init();
 }
 
+// Initialize TIM16 for PWM
 void MX_TIM16_Init(void)
 {
     TIM_OC_InitTypeDef sConfigOC = {0};
@@ -63,8 +71,9 @@ void MX_TIM16_Init(void)
     }
 }
 
-void MX_TIM17_Init(void)
-{
+// Initialize TIM17 for audio playback
+void MX_TIM17_Init(void) {
+    // Interrupt Service Routine needs to be registered
     __HAL_RCC_TIM17_CLK_ENABLE();
     HAL_NVIC_SetPriority(TIM1_TRG_COM_TIM17_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(TIM1_TRG_COM_TIM17_IRQn);
@@ -82,64 +91,76 @@ void MX_TIM17_Init(void)
     }
 }
 
-void startAudio(int8_t *audio, size_t num_samples)
-{
-    current_sample = audio;
-    samples_remaining = num_samples;
-    HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1);
-    HAL_TIM_Base_Start_IT(&htim17);
-}
-
-void stopAudio(void) {
-    current_sample = NULL;
-    samples_remaining = 0;
-    HAL_TIM_PWM_Stop(&htim16, TIM_CHANNEL_1);
-    HAL_TIM_Base_Stop_IT(&htim17);
-}
-
-void adjustDutyCycle(float dutyCycle) {
-    __HAL_TIM_SET_COMPARE(&htim16, TIM_CHANNEL_1, calculateDutyCycle(dutyCycle));
-}
-
+// Initialize GPIO for PWM signal
 void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* htim_pwm)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     
-    if(htim_pwm->Instance == TIM16)
-    {
-        /* 1. Enable peripheral clocks */
-        __HAL_RCC_GPIOE_CLK_ENABLE();  // Clock for Port E
-        __HAL_RCC_TIM16_CLK_ENABLE();  // Clock for Timer 16
+    if(htim_pwm->Instance == TIM16) {
+        // Enable clocks for GPIOE and TIM16
+        __HAL_RCC_GPIOE_CLK_ENABLE();
+        __HAL_RCC_TIM16_CLK_ENABLE();
 
-        /* 2. Configure PE0 Pin Properties */
+        // Configure PE0 with alternate function
         GPIO_InitStruct.Pin = GPIO_PIN_0;
-        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;         // Alternate Function Push-Pull
-        GPIO_InitStruct.Pull = GPIO_NOPULL;             // Keep neutral (or pull up/down depending on hardware)
-        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;    // Can be adjusted to Medium/High based on your frequency
+        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+        GPIO_InitStruct.Pull = GPIO_NOPULL;
+        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
         
-        /* 3. Assign Alternate Function (AF4 for TIM16_CH1 on PE0) */
+        // Use TIM16 PWM as alternate function
         GPIO_InitStruct.Alternate = GPIO_AF14_TIM16; 
         
-        // Initialize GPIOE Pin 0
+        // Initialize PE0 with previous struct
         HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
     }
 }
 
+// Callback for TIM17 to play samples
 void TIM17_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-  if (htim->Instance == TIM17)
-  {
-    if (current_sample != NULL && samples_remaining > 0) {
-        adjustDutyCycle(((int)*current_sample + 127) / 255.0f);
-        current_sample++;
-        samples_remaining--;
-    } else {
-        stopAudio();
-    }
+    if (htim->Instance == TIM17) {
+        // Check if still playing audio and valid audio loaded
+        if (current_sample != NULL && samples_remaining > 0) {
+            // Adjust duty cycle based on current amplitude
+            adjustDutyCycle(((int)*current_sample + 127) / 255.0f);
+            // Go to next sample and keep track of number left
+            current_sample++;
+            samples_remaining--;
+        } else {
+            // Stop audio if TIM17 still active and audio done
+            stopAudio();
+        }
   }
 }
 
+// Use HAL IRQHandler for timers
 void TIM1_TRG_COM_TIM17_IRQHandler(void)
 {
-  HAL_TIM_IRQHandler(&htim17); // Call HAL handler for TIM17
+  HAL_TIM_IRQHandler(&htim17);
+}
+
+// Start audio with pointer to audio buffer and number of samples in audio
+void startAudio(int8_t *audio, size_t num_samples)
+{
+    // Set sample pointer and number of samples
+    current_sample = audio;
+    samples_remaining = num_samples;
+    // Begin TIM16 and TIM17 for PWM and playback, respectively
+    HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1);
+    HAL_TIM_Base_Start_IT(&htim17);
+}
+
+// Stops all audio
+void stopAudio(void) {
+    // Set no samples left and current sample to null pointer
+    current_sample = NULL;
+    samples_remaining = 0;
+    // Stop TIM16 and TIM17
+    HAL_TIM_PWM_Stop(&htim16, TIM_CHANNEL_1);
+    HAL_TIM_Base_Stop_IT(&htim17);
+}
+
+// Adjust duty cycle of TIM16 dynamically
+void adjustDutyCycle(float dutyCycle) {
+    __HAL_TIM_SET_COMPARE(&htim16, TIM_CHANNEL_1, calculateDutyCycle(dutyCycle));
 }

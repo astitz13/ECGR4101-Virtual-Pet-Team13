@@ -33,6 +33,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "audio.h"
+#include "cmsis_gcc.h"
 #include "ili9341.h"
 #include "gfx01m2_conf.h"
 #include "imported_audio.h"
@@ -55,6 +56,7 @@ static void Demo_ColorBars(void);
 static void Demo_Shapes(void);
 static void Demo_Text(void);
 static void Demo_Joystick(void);
+static void Demo_Microphone(void);
 
 /* Joystick (B1) bit flags returned by Joystick_Read() */
 #define JOY_LEFT_MASK   (1U << 0)
@@ -102,38 +104,18 @@ int main(void)
   ILI9341_DrawString(30, 40, "NUCLEO-L496ZG-P", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
   HAL_Delay(2000);
 
-  float samples[190] = {0};
-  float prevsamples[190] = {0};
-
   /* Infinite loop: cycle through the demo pages */
   startAudio((int8_t*)&AUDIO_PERRY, AUDIO_PERRY_SAMPLES);
   startRecording();
   while (1)
   {
-    //MPU6050_data_t sensor_data;
-    //MPU6050_getParsedData(&sensor_data);
-    //float test = getMicrophoneDataCentered();
-    getRecordedMicrophoneData((float*)samples, 190);
-    for (int i = 0; i < 190; i++) {
-      samples[i] *= 50;
-    }
-    //float test = getLatestMicrophoneData();
-    //char testbuf[20];
-    //snprintf(testbuf, sizeof(testbuf), "VALUE: %d  ", (int)(test * 100));
-    //ILI9341_DrawString(18, 50, testbuf, ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-    ILI9341_DrawRect(25, 100, 190, 100, ILI9341_COLOR_WHITE);
-    for (int i = 1; i < 190; i++) {
-      ILI9341_DrawLine(25 + i - 1, 150 - prevsamples[i - 1], 25 + i, 150 - prevsamples[i], ILI9341_COLOR_BLACK);
-    }
-    //samples[189] = test * 50;
-    for (int i = 1; i < 190; i++) {
-      ILI9341_DrawLine(25 + i - 1, 150 - samples[i - 1], 25 + i, 150 - samples[i], ILI9341_COLOR_CYAN);
-    }
-    for (int i = 1; i < 190; i++) {
-      prevsamples[i] = samples[i];
-      samples[i - 1] = samples[i];
-    }
-    /*Demo_ColorBars();
+    MPU6050_data_t sensor_data;
+    MPU6050_getParsedData(&sensor_data);
+    __NOP(); // Breakpoint here to see sensor data
+
+    Demo_Microphone();
+
+    Demo_ColorBars();
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
     HAL_Delay(1500);
 
@@ -146,7 +128,44 @@ int main(void)
     HAL_Delay(1500);
 
     Demo_Joystick();
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);*/
+    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+  }
+}
+
+static void Demo_Microphone(void)
+{
+  float samples[190] = {0};
+  float prevsamples[190] = {0};
+
+  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+  ILI9341_DrawString(18, 12, "MICROPHONE DEMO", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+
+  // Loop through 500 times since this requires polling and can't just have a HAL_Delay
+  for (int microphone_iter = 0; microphone_iter < 500; microphone_iter++) {
+    // Get data into samples
+    getRecordedMicrophoneData((float*)samples, 190);
+    // Scale samples for display
+    for (int i = 0; i < 190; i++) {
+      samples[i] *= 50;
+    }
+
+    // Rectangle around microphone box
+    ILI9341_DrawRect(25, 100, 190, 100, ILI9341_COLOR_WHITE);
+
+    // Clear previous iteration of samples
+    for (int i = 1; i < 190; i++) {
+      ILI9341_DrawLine(25 + i - 1, 150 - prevsamples[i - 1], 25 + i, 150 - prevsamples[i], ILI9341_COLOR_BLACK);
+    }
+
+    // 
+    for (int i = 1; i < 190; i++) {
+      ILI9341_DrawLine(25 + i - 1, 150 - samples[i - 1], 25 + i, 150 - samples[i], ILI9341_COLOR_CYAN);
+    }
+
+    for (int i = 1; i < 190; i++) {
+      prevsamples[i] = samples[i];
+      samples[i - 1] = samples[i];
+    }
   }
 }
 
