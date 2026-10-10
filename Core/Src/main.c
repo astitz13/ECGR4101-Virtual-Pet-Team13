@@ -44,8 +44,9 @@
 #include "string.h"
 #include "stdio.h"
 #include "ui.h"
+#include "input.h"
 
-/* Temporary UI bring-up test: 1 = show the UI meter test,
+/* Temporary UI bring-up test: 1 = show the UI meter + input test,
  * 0 = run the original LCD demo pages */
 #define UI_DEMO 1
 
@@ -111,24 +112,56 @@ int main(void)
   HAL_Delay(2000);
 
 #if UI_DEMO
-  /* No pet logic yet, so fake meter values drain by 1 every 200 ms (then
-   * refill). Timing uses HAL_GetTick() instead of HAL_Delay() so the loop
-   * never blocks. */
+  /* UI bring-up test (no pet logic yet). Fake meters drain by 1 per second;
+   * B1 = +10 fullness, joystick UP/DOWN = +/-10 happiness. The last button
+   * pressed and a press counter are shown to check that one physical press
+   * gives exactly one event. Timing uses HAL_GetTick(), never HAL_Delay(). */
   {
+    /* Same order as the INPUT_xxx bit flags in input.h */
+    static const char *const names[6] = { "UP    ", "DOWN  ", "LEFT  ", "RIGHT ", "CENTER", "B1    " };
     uint8_t fullness = 100U;
     uint8_t happiness = 60U;
+    uint16_t press_count = 0U;
     uint32_t last_step = HAL_GetTick();
 
     UI_Init();
+    ILI9341_DrawString(8, 80, "LAST:", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+    ILI9341_DrawString(8, 104, "PRESSES:", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
     while (1)
     {
       uint32_t now = HAL_GetTick();
+      uint8_t pressed;
+      uint8_t i;
 
-      if ((now - last_step) >= 200U)
+      Input_Update(now);
+      pressed = Input_GetPressed();
+
+      if ((now - last_step) >= 1000U)
       {
         last_step = now;
-        fullness  = (fullness > 0U)  ? (uint8_t)(fullness - 1U)  : 100U;
-        happiness = (happiness > 0U) ? (uint8_t)(happiness - 1U) : 100U;
+        if (fullness > 0U)  { fullness--; }
+        if (happiness > 0U) { happiness--; }
+      }
+
+      if (pressed & INPUT_B1)   { fullness  = (fullness > 90U)  ? 100U : (uint8_t)(fullness + 10U); }
+      if (pressed & INPUT_UP)   { happiness = (happiness > 90U) ? 100U : (uint8_t)(happiness + 10U); }
+      if (pressed & INPUT_DOWN) { happiness = (happiness < 10U) ? 0U   : (uint8_t)(happiness - 10U); }
+
+      for (i = 0U; i < 6U; i++)
+      {
+        if (pressed & (1U << i))
+        {
+          char count_text[4];
+
+          press_count = (uint16_t)((press_count + 1U) % 1000U);
+          count_text[0] = (press_count >= 100U) ? (char)('0' + press_count / 100U) : ' ';
+          count_text[1] = (press_count >= 10U) ? (char)('0' + (press_count / 10U) % 10U) : ' ';
+          count_text[2] = (char)('0' + press_count % 10U);
+          count_text[3] = '\0';
+
+          ILI9341_DrawString(80, 80, names[i], ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 2);
+          ILI9341_DrawString(110, 104, count_text, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 2);
+        }
       }
       UI_DrawMeters(fullness, happiness);
     }
