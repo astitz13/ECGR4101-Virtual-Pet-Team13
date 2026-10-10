@@ -43,6 +43,11 @@
 #include "sensors.h"
 #include "string.h"
 #include "stdio.h"
+#include "ui.h"
+
+/* Temporary UI bring-up test: 1 = show the UI meter test,
+ * 0 = run the original LCD demo pages */
+#define UI_DEMO 1
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
@@ -104,6 +109,31 @@ int main(void)
   ILI9341_DrawString(18, 12, "GFX01M2 LCD DEMO", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
   ILI9341_DrawString(30, 40, "NUCLEO-L496ZG-P", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
   HAL_Delay(2000);
+
+#if UI_DEMO
+  /* No pet logic yet, so fake meter values drain by 1 every 200 ms (then
+   * refill). Timing uses HAL_GetTick() instead of HAL_Delay() so the loop
+   * never blocks. */
+  {
+    uint8_t fullness = 100U;
+    uint8_t happiness = 60U;
+    uint32_t last_step = HAL_GetTick();
+
+    UI_Init();
+    while (1)
+    {
+      uint32_t now = HAL_GetTick();
+
+      if ((now - last_step) >= 200U)
+      {
+        last_step = now;
+        fullness  = (fullness > 0U)  ? (uint8_t)(fullness - 1U)  : 100U;
+        happiness = (happiness > 0U) ? (uint8_t)(happiness - 1U) : 100U;
+      }
+      UI_DrawMeters(fullness, happiness);
+    }
+  }
+#endif
 
   /* Infinite loop: cycle through the demo pages */
   startAudio((int8_t*)&AUDIO_PERRY, AUDIO_PERRY_SAMPLES);
