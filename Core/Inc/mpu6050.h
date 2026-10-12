@@ -1,14 +1,18 @@
 #ifndef MPU6050_H
 #define MPU6050_H
 
-
+// Includ enecessary HAL functions and typedefs
 #include "stm32l4xx_hal.h"
+// Required for getDataReady boolean function
 #include <stdbool.h>
 
+// I2C address for MPU6050
 #define MPU6050_I2C_ADDR (0x68 << 1)
+// INT (interrupt) pin and port for determining if data is ready
 #define MPU6050_INT_PORT GPIOF
 #define MPU6050_INT_PIN 11
 
+// Enum of registers on MPU6050
 typedef enum {
     MPU6050_SELF_TEST_X = 0x0D,
     MPU6050_SELF_TEST_Y = 0x0E,
@@ -48,6 +52,7 @@ typedef enum {
     MPU6050_WHO_AM_I = 0x75
 } MPU6050_register_t;
 
+// Struct of normalized MPU6050 sensor data
 typedef struct {
     float acc_x;
     float acc_y;
@@ -58,6 +63,7 @@ typedef struct {
     float gyro_z;
 } MPU6050_data_t;
 
+// Struct of raw MPU6050 sensor data
 typedef struct {
     uint16_t acc_x;
     uint16_t acc_y;
@@ -68,18 +74,22 @@ typedef struct {
     uint16_t gyro_z;
 } MPU6050_data_raw_t;
 
+// Write and read bytes through I2C
 void MPU6050_writeBytes(MPU6050_register_t reg, uint16_t len, uint8_t *data);
 void MPU6050_readBytes(MPU6050_register_t reg, uint16_t len, uint8_t *data);
 
-void MPU6050_init();
+// Initialize MPU6050 through configuring channels over I2C
+void MPU6050_init(void);
 
+// Functions to get raw and parsed sensor data
 void MPU6050_getData(MPU6050_data_raw_t *data);
 void MPU6050_getParsedData(MPU6050_data_t *data);
 
-bool MPU6050_getDataReady();
+// Get if data is ready through interrupt pin
+bool MPU6050_getDataReady(void);
 
-
-void I2C_Init();
+// Necessary functions for I2C initialization
+void I2C_Init(void);
 void HAL_I2C_MspInit(I2C_HandleTypeDef* i2cHandle);
 void HAL_I2C_MspDeInit(I2C_HandleTypeDef* i2cHandle);
 
