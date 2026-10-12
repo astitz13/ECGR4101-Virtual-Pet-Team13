@@ -12,6 +12,7 @@
 #include "ui.h"
 #include "ili9341.h"
 #include "input.h"
+#include "anim.h"
 #include <string.h>
 
 #define UI_BG_COLOR         ILI9341_COLOR_BLACK
@@ -36,11 +37,18 @@
 #define UI_TITLE_Y          72U
 #define UI_HINT_Y           296U
 
-/* Pet area: placeholder box until the sprite animations are added */
+/* Pet area (outlined window) and the animation box centered inside it */
 #define PET_AREA_X          40U
 #define PET_AREA_Y          88U
 #define PET_AREA_W          160U
 #define PET_AREA_H          160U
+#define PET_ANIM_W              96U
+#define PET_ANIM_H              96U
+#define PET_ANIM_X              (PET_AREA_X + (PET_AREA_W - PET_ANIM_W) / 2U)
+#define PET_ANIM_Y              (PET_AREA_Y + (PET_AREA_H - PET_ANIM_H) / 2U)
+#define UI_PROMPT_Y         262U   /* action prompt line below the pet area */
+
+#define PERRY_TEAL          0x04B2U   /* RGB565 for roughly (0, 150, 150) */
 
 /* Menu rows */
 #define MENU_ROW_X          20U
@@ -69,6 +77,11 @@ static int16_t drawn_happiness = -1;
 static uint8_t  hold_active;
 static uint32_t hold_start_ms;
 static uint16_t drawn_hold_px;
+
+/* Pet animation shown in the pet area; ui_now_ms is the latest HAL_GetTick()
+ * passed to UI_Update(), used when a screen change starts an animation */
+static AnimPlayer pet_anim;
+static uint32_t   ui_now_ms;
 
 static uint8_t Screen_IsGameOver(UiScreen s)
 {
@@ -162,6 +175,69 @@ static void Menu_Select(uint8_t index)
   Menu_DrawRow(index);
 }
 
+/* ------------------------------------------------------------ animations */
+
+/* Placeholder pet drawn from rectangles until the sprite frames exist.
+ * Clears the animation box, then draws the pet shifted dy px (negative = up). */
+static void Placeholder_DrawPerry(uint16_t x, uint16_t y, int16_t dy, uint8_t eyes_closed, uint8_t mouth_open)
+{
+  uint16_t top = (uint16_t)((int16_t)y + 28 + dy);
+
+  ILI9341_FillRect(x, y, PET_ANIM_W, PET_ANIM_H, UI_BG_COLOR);
+
+  ILI9341_FillRect((uint16_t)(x + 16U), top, 64U, 52U, PERRY_TEAL);                 /* body */
+  if (eyes_closed)
+  {
+    ILI9341_FillRect((uint16_t)(x + 26U), (uint16_t)(top + 15U), 14U, 2U, UI_BG_COLOR);
+    ILI9341_FillRect((uint16_t)(x + 56U), (uint16_t)(top + 15U), 14U, 2U, UI_BG_COLOR);
+  }
+  else
+  {
+    ILI9341_FillRect((uint16_t)(x + 26U), (uint16_t)(top + 8U), 14U, 14U, UI_TEXT_COLOR);
+    ILI9341_FillRect((uint16_t)(x + 56U), (uint16_t)(top + 8U), 14U, 14U, UI_TEXT_COLOR);
+    ILI9341_FillRect((uint16_t)(x + 31U), (uint16_t)(top + 13U), 5U, 5U, UI_BG_COLOR);  /* pupils */
+    ILI9341_FillRect((uint16_t)(x + 61U), (uint16_t)(top + 13U), 5U, 5U, UI_BG_COLOR);
+  }
+  ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(top + 30U), 48U, 10U, ILI9341_COLOR_ORANGE);  /* beak */
+  if (mouth_open)
+  {
+    ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(top + 40U), 48U, 4U, UI_BG_COLOR);
+    ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(top + 44U), 48U, 6U, ILI9341_COLOR_ORANGE);
+  }
+  ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(top + 52U), 14U, 6U, ILI9341_COLOR_ORANGE);  /* feet */
+  ILI9341_FillRect((uint16_t)(x + 58U), (uint16_t)(top + 52U), 14U, 6U, ILI9341_COLOR_ORANGE);
+}
+
+/* Idle: gentle bob with a blink on frame 2 */
+static void Idle_Draw(uint8_t frame, uint16_t x, uint16_t y)
+{
+  static const int8_t bob[4] = { 0, 2, 4, 2 };
+  Placeholder_DrawPerry(x, y, bob[frame], (uint8_t)(frame == 2U), 0U);
+}
+
+/* Eating: food drops in (frames 0-2), then chomps (frames 3-5) */
+static void Eat_Draw(uint8_t frame, uint16_t x, uint16_t y)
+{
+  static const uint8_t food_y[3] = { 0U, 8U, 16U };
+
+  Placeholder_DrawPerry(x, y, 0, 0U, (uint8_t)((frame < 3U) || (frame == 4U)));
+  if (frame < 3U)
+  {
+    ILI9341_FillRect((uint16_t)(x + 42U), (uint16_t)(y + food_y[frame]), 12U, 12U, ILI9341_COLOR_YELLOW);
+  }
+}
+
+/* Playing: two happy jumps */
+static void Play_Draw(uint8_t frame, uint16_t x, uint16_t y)
+{
+  static const int8_t jump[7] = { 0, -8, -14, -8, 0, -6, 0 };
+  Placeholder_DrawPerry(x, y, jump[frame], 0U, (uint8_t)(jump[frame] < 0));
+}
+
+static const Animation anim_idle = { Idle_Draw, 4U, 300U, 1U };
+static const Animation anim_eat  = { Eat_Draw,  6U, 180U, 0U };
+static const Animation anim_play = { Play_Draw, 7U, 120U, 0U };
+
 /* --------------------------------------------------------------- screens */
 
 static void Restart_DrawBar(void)
@@ -178,7 +254,6 @@ static void Screen_DrawBody(void)
   {
     case UI_SCREEN_PET:
       ILI9341_DrawRect(PET_AREA_X, PET_AREA_Y, PET_AREA_W, PET_AREA_H, UI_HINT_COLOR);
-      UI_DrawCentered((uint16_t)(PET_AREA_Y + PET_AREA_H / 2U - 7U), "PERRY", ILI9341_COLOR_ORANGE, UI_TEXT_SIZE);
       UI_DrawCentered(UI_HINT_Y, "CENTER: MENU", UI_HINT_COLOR, UI_TEXT_SIZE);
       break;
 
@@ -193,15 +268,15 @@ static void Screen_DrawBody(void)
 
     case UI_SCREEN_FEED:
       UI_DrawCentered(UI_TITLE_Y, "FEEDING", UI_TEXT_COLOR, UI_TEXT_SIZE);
-      UI_DrawCentered(140U, "PRESS B1", UI_TEXT_COLOR, UI_TEXT_SIZE);
-      UI_DrawCentered(164U, "TO FEED PERRY", UI_TEXT_COLOR, UI_TEXT_SIZE);
+      ILI9341_DrawRect(PET_AREA_X, PET_AREA_Y, PET_AREA_W, PET_AREA_H, UI_HINT_COLOR);
+      UI_DrawCentered(UI_PROMPT_Y, "PRESS B1 TO FEED", UI_TEXT_COLOR, UI_TEXT_SIZE);
       UI_DrawCentered(UI_HINT_Y, "LEFT: BACK", UI_HINT_COLOR, UI_TEXT_SIZE);
       break;
 
     case UI_SCREEN_GAME:
       UI_DrawCentered(UI_TITLE_Y, "GAME", UI_TEXT_COLOR, UI_TEXT_SIZE);
-      UI_DrawCentered(140U, "NOT READY YET", UI_TEXT_COLOR, UI_TEXT_SIZE);
-      UI_DrawCentered(164U, "CENTER: PLAY", UI_TEXT_COLOR, UI_TEXT_SIZE);
+      ILI9341_DrawRect(PET_AREA_X, PET_AREA_Y, PET_AREA_W, PET_AREA_H, UI_HINT_COLOR);
+      UI_DrawCentered(UI_PROMPT_Y, "CENTER: PLAY", UI_TEXT_COLOR, UI_TEXT_SIZE);
       UI_DrawCentered(UI_HINT_Y, "LEFT: BACK", UI_HINT_COLOR, UI_TEXT_SIZE);
       break;
 
@@ -235,6 +310,7 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
     full_redraw = 1U;
   }
   screen = next;
+  Anim_Stop(&pet_anim);
 
   if (full_redraw)
   {
@@ -250,6 +326,12 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
   }
 
   Screen_DrawBody();
+
+  /* Screens with a pet area start out with the idle animation */
+  if ((next == UI_SCREEN_PET) || (next == UI_SCREEN_FEED) || (next == UI_SCREEN_GAME))
+  {
+    Anim_Start(&pet_anim, &anim_idle, PET_ANIM_X, PET_ANIM_Y, ui_now_ms);
+  }
 }
 
 /* Hold CENTER to restart: fills the progress bar while held, resets it on release.
@@ -308,6 +390,14 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
 {
   UiRequest request = UI_REQUEST_NONE;
 
+  ui_now_ms = now_ms;
+
+  /* Advance the pet animation; when a one-shot (eat/play) ends, go back to idle */
+  if (Anim_Update(&pet_anim, now_ms))
+  {
+    Anim_Start(&pet_anim, &anim_idle, PET_ANIM_X, PET_ANIM_Y, now_ms);
+  }
+
   switch (screen)
   {
     case UI_SCREEN_PET:
@@ -341,6 +431,7 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
       if (pressed & INPUT_B1)
       {
         request = UI_REQUEST_FEED;
+        Anim_Start(&pet_anim, &anim_eat, PET_ANIM_X, PET_ANIM_Y, now_ms);
       }
       if (pressed & INPUT_LEFT)
       {
@@ -352,6 +443,7 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
       if (pressed & INPUT_CENTER)
       {
         request = UI_REQUEST_PLAY;
+        Anim_Start(&pet_anim, &anim_play, PET_ANIM_X, PET_ANIM_Y, now_ms);
       }
       if (pressed & INPUT_LEFT)
       {
