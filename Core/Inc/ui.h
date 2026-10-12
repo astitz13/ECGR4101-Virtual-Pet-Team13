@@ -17,6 +17,7 @@
 typedef enum
 {
   UI_SCREEN_PET,        /* main screen: meters + pet */
+  UI_SCREEN_AGENT,      /* pet screen after a while with no input: hat on */
   UI_SCREEN_MENU,       /* action list with highlighted selection */
   UI_SCREEN_FEED,       /* feeding: B1 taps feed the pet */
   UI_SCREEN_GAME,       /* play/game action */
@@ -29,6 +30,7 @@ typedef enum
   UI_REQUEST_NONE,
   UI_REQUEST_FEED,      /* user fed the pet once (one B1 tap) */
   UI_REQUEST_PLAY,      /* user played with the pet once */
+  UI_REQUEST_VOICE,     /* a voice called the pet back out of agent mode */
   UI_REQUEST_RESTART    /* user held CENTER on the dead/ran-away screen */
 } UiRequest;
 
@@ -49,6 +51,11 @@ void UI_DrawMeters(uint8_t fullness, uint8_t happiness);
 /* Switches to UI_SCREEN_DEAD or UI_SCREEN_RAN_AWAY (any other value is
  * ignored). Safe to call every loop pass: does nothing if already showing. */
 void UI_ShowGameOver(UiScreen screen);
+
+/* Tells the UI a voice was heard (e.g. microphone loudness above a
+ * threshold). In agent mode this takes the hat off and makes the next
+ * UI_Update() return UI_REQUEST_VOICE; on other screens it is ignored. */
+void UI_NotifyVoice(void);
 
 /* Returns the screen currently shown. */
 UiScreen UI_GetScreen(void);

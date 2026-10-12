@@ -49,6 +49,10 @@
 #define UI_PROMPT_Y         262U   /* action prompt line below the pet area */
 
 #define PERRY_TEAL          0x04B2U   /* RGB565 for roughly (0, 150, 150) */
+#define PERRY_HAT_BROWN     0x6204U   /* RGB565 for roughly (100, 65, 33) */
+
+/* No input on the pet screen for this long -> agent mode (hat on) */
+#define AGENT_IDLE_MS       10000U
 
 /* Menu rows */
 #define MENU_ROW_X          20U
@@ -82,6 +86,11 @@ static uint16_t drawn_hold_px;
  * passed to UI_Update(), used when a screen change starts an animation */
 static AnimPlayer pet_anim;
 static uint32_t   ui_now_ms;
+
+/* Agent mode: time of the last button activity, and a voice heard since the
+ * last UI_Update() (set by UI_NotifyVoice()) */
+static uint32_t last_input_ms;
+static uint8_t  voice_pending;
 
 static uint8_t Screen_IsGameOver(UiScreen s)
 {
@@ -208,6 +217,26 @@ static void Placeholder_DrawPerry(uint16_t x, uint16_t y, int16_t dy, uint8_t ey
   ILI9341_FillRect((uint16_t)(x + 58U), (uint16_t)(top + 52U), 14U, 6U, ILI9341_COLOR_ORANGE);
 }
 
+/* Agent fedora drawn above the placeholder pet. dy is the pet's offset (same
+ * as Placeholder_DrawPerry), hat_dy lifts the hat above its resting spot. */
+static void Placeholder_DrawHat(uint16_t x, uint16_t y, int16_t dy, int16_t hat_dy)
+{
+  uint16_t brim = (uint16_t)((int16_t)y + 24 + dy + hat_dy);
+
+  ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(brim - 14U), 48U, 14U, PERRY_HAT_BROWN);  /* crown */
+  ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(brim - 5U), 48U, 3U, UI_BG_COLOR);       /* band */
+  ILI9341_FillRect((uint16_t)(x + 10U), brim, 76U, 5U, PERRY_HAT_BROWN);                     /* brim */
+}
+
+/* Half-closes the eyes for the agent's serious look */
+static void Placeholder_NarrowEyes(uint16_t x, uint16_t y, int16_t dy)
+{
+  uint16_t top = (uint16_t)((int16_t)y + 28 + dy);
+
+  ILI9341_FillRect((uint16_t)(x + 26U), (uint16_t)(top + 8U), 14U, 7U, PERRY_TEAL);
+  ILI9341_FillRect((uint16_t)(x + 56U), (uint16_t)(top + 8U), 14U, 7U, PERRY_TEAL);
+}
+
 /* Idle: gentle bob with a blink on frame 2 */
 static void Idle_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
@@ -234,9 +263,47 @@ static void Play_Draw(uint8_t frame, uint16_t x, uint16_t y)
   Placeholder_DrawPerry(x, y, jump[frame], 0U, (uint8_t)(jump[frame] < 0));
 }
 
-static const Animation anim_idle = { Idle_Draw, 4U, 300U, 1U };
-static const Animation anim_eat  = { Eat_Draw,  6U, 180U, 0U };
-static const Animation anim_play = { Play_Draw, 7U, 120U, 0U };
+/* Agent mode starts: the hat drops onto his head, then the eyes narrow */
+static void HatOn_Draw(uint8_t frame, uint16_t x, uint16_t y)
+{
+  static const int8_t hat_dy[5] = { -10, -6, -3, 0, 0 };
+
+  Placeholder_DrawPerry(x, y, 0, 0U, 0U);
+  Placeholder_DrawHat(x, y, 0, hat_dy[frame]);
+  if (frame == 4U)
+  {
+    Placeholder_NarrowEyes(x, y, 0);
+  }
+}
+
+/* Agent idle: hat on, eyes narrowed, slow sway */
+static void AgentIdle_Draw(uint8_t frame, uint16_t x, uint16_t y)
+{
+  int16_t dy = (frame == 0U) ? 0 : 2;
+
+  Placeholder_DrawPerry(x, y, dy, 0U, 0U);
+  Placeholder_DrawHat(x, y, dy, 0);
+  Placeholder_NarrowEyes(x, y, dy);
+}
+
+/* Called back: the hat lifts off and he looks happy */
+static void HatOff_Draw(uint8_t frame, uint16_t x, uint16_t y)
+{
+  static const int8_t hat_dy[4] = { -3, -6, -10, 0 };
+
+  Placeholder_DrawPerry(x, y, 0, 0U, (uint8_t)(frame == 3U));
+  if (frame < 3U)
+  {
+    Placeholder_DrawHat(x, y, 0, hat_dy[frame]);
+  }
+}
+
+static const Animation anim_idle       = { Idle_Draw,       4U, 300U, 1U };
+static const Animation anim_eat        = { Eat_Draw,        6U, 180U, 0U };
+static const Animation anim_play       = { Play_Draw,       7U, 120U, 0U };
+static const Animation anim_hat_on     = { HatOn_Draw,      5U, 200U, 0U };
+static const Animation anim_agent_idle = { AgentIdle_Draw,  2U, 600U, 1U };
+static const Animation anim_hat_off    = { HatOff_Draw,     4U, 180U, 0U };
 
 /* --------------------------------------------------------------- screens */
 
@@ -246,6 +313,23 @@ static void Restart_DrawBar(void)
   drawn_hold_px = 0U;
 }
 
+/* Redraws only the text below the pet area, so the pet screen can switch in
+ * and out of agent mode without touching the animation */
+static void PetScreen_DrawPrompts(void)
+{
+  ILI9341_FillRect(0U, UI_PROMPT_Y, ILI9341_WIDTH, (uint16_t)(ILI9341_HEIGHT - UI_PROMPT_Y), UI_BG_COLOR);
+
+  if (screen == UI_SCREEN_AGENT)
+  {
+    UI_DrawCentered(UI_PROMPT_Y, "AGENT MODE", ILI9341_COLOR_ORANGE, UI_TEXT_SIZE);
+    UI_DrawCentered(UI_HINT_Y, "MAKE A SOUND TO CALL PERRY BACK", UI_HINT_COLOR, 1U);
+  }
+  else
+  {
+    UI_DrawCentered(UI_HINT_Y, "CENTER: MENU", UI_HINT_COLOR, UI_TEXT_SIZE);
+  }
+}
+
 static void Screen_DrawBody(void)
 {
   uint8_t i;
@@ -253,8 +337,9 @@ static void Screen_DrawBody(void)
   switch (screen)
   {
     case UI_SCREEN_PET:
+    case UI_SCREEN_AGENT:
       ILI9341_DrawRect(PET_AREA_X, PET_AREA_Y, PET_AREA_W, PET_AREA_H, UI_HINT_COLOR);
-      UI_DrawCentered(UI_HINT_Y, "CENTER: MENU", UI_HINT_COLOR, UI_TEXT_SIZE);
+      PetScreen_DrawPrompts();
       break;
 
     case UI_SCREEN_MENU:
@@ -311,6 +396,8 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
   }
   screen = next;
   Anim_Stop(&pet_anim);
+  last_input_ms = ui_now_ms;   /* agent-mode countdown restarts on every screen change */
+  voice_pending = 0U;
 
   if (full_redraw)
   {
@@ -382,6 +469,7 @@ void UI_Init(void)
 {
   menu_index = 0U;
   hold_active = 0U;
+  ui_now_ms = HAL_GetTick();
   screen = UI_SCREEN_PET;
   Screen_Show(UI_SCREEN_PET, 1U);
 }
@@ -391,11 +479,16 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
   UiRequest request = UI_REQUEST_NONE;
 
   ui_now_ms = now_ms;
+  if ((pressed | held) != 0U)
+  {
+    last_input_ms = now_ms;
+  }
 
-  /* Advance the pet animation; when a one-shot (eat/play) ends, go back to idle */
+  /* Advance the pet animation; when a one-shot ends, return to the matching idle loop */
   if (Anim_Update(&pet_anim, now_ms))
   {
-    Anim_Start(&pet_anim, &anim_idle, PET_ANIM_X, PET_ANIM_Y, now_ms);
+    Anim_Start(&pet_anim, (screen == UI_SCREEN_AGENT) ? &anim_agent_idle : &anim_idle,
+               PET_ANIM_X, PET_ANIM_Y, now_ms);
   }
 
   switch (screen)
@@ -405,6 +498,32 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
       {
         menu_index = 0U;
         Screen_Show(UI_SCREEN_MENU, 0U);
+      }
+      else if (((now_ms - last_input_ms) >= AGENT_IDLE_MS) && (Anim_Current(&pet_anim) == &anim_idle))
+      {
+        /* Left alone too long: hat goes on */
+        screen = UI_SCREEN_AGENT;
+        voice_pending = 0U;
+        PetScreen_DrawPrompts();
+        Anim_Start(&pet_anim, &anim_hat_on, PET_ANIM_X, PET_ANIM_Y, now_ms);
+      }
+      break;
+
+    case UI_SCREEN_AGENT:
+      /* A voice (reported by UI_NotifyVoice) or any button calls him back.
+       * Only the voice counts as an interaction for the pet logic; the
+       * button press is used up by waking him. */
+      if (voice_pending || (pressed != 0U))
+      {
+        if (voice_pending)
+        {
+          request = UI_REQUEST_VOICE;
+        }
+        voice_pending = 0U;
+        screen = UI_SCREEN_PET;
+        last_input_ms = now_ms;
+        PetScreen_DrawPrompts();
+        Anim_Start(&pet_anim, &anim_hat_off, PET_ANIM_X, PET_ANIM_Y, now_ms);
       }
       break;
 
@@ -497,6 +616,14 @@ void UI_ShowGameOver(UiScreen which)
   }
   hold_active = 0U;
   Screen_Show(which, 1U);
+}
+
+void UI_NotifyVoice(void)
+{
+  if (screen == UI_SCREEN_AGENT)
+  {
+    voice_pending = 1U;
+  }
 }
 
 UiScreen UI_GetScreen(void)

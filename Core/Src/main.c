@@ -114,9 +114,11 @@ int main(void)
 #if UI_DEMO
   /* UI bring-up test with stand-in pet logic (until pet.c exists): meters
    * drain by 1 per second; FEED (B1 on the feed screen) = +10 fullness,
-   * PLAY (CENTER on the game screen) = +10 happiness. Fullness 0 -> dead
-   * screen, happiness 0 -> ran-away screen; hold CENTER 2 s to restart.
-   * Timing uses HAL_GetTick(), never HAL_Delay(). */
+   * PLAY (CENTER on the game screen) = +10 happiness, VOICE = +5 happiness.
+   * There is no microphone on the test board, so B1 in agent mode stands in
+   * for "voice heard". Fullness 0 -> dead screen, happiness 0 -> ran-away
+   * screen; hold CENTER 2 s to restart. Timing uses HAL_GetTick(), never
+   * HAL_Delay(). */
   {
     uint8_t fullness = 40U;
     uint8_t happiness = 70U;
@@ -127,9 +129,16 @@ int main(void)
     {
       uint32_t now = HAL_GetTick();
       UiRequest request;
+      uint8_t pressed;
 
       Input_Update(now);
-      request = UI_Update(now, Input_GetPressed(), Input_GetHeld());
+      pressed = Input_GetPressed();
+      if ((UI_GetScreen() == UI_SCREEN_AGENT) && (pressed & INPUT_B1))
+      {
+        UI_NotifyVoice();
+        pressed &= (uint8_t)~INPUT_B1;
+      }
+      request = UI_Update(now, pressed, Input_GetHeld());
 
       switch (request)
       {
@@ -138,6 +147,9 @@ int main(void)
           break;
         case UI_REQUEST_PLAY:
           happiness = (happiness > 90U) ? 100U : (uint8_t)(happiness + 10U);
+          break;
+        case UI_REQUEST_VOICE:
+          happiness = (happiness > 95U) ? 100U : (uint8_t)(happiness + 5U);
           break;
         case UI_REQUEST_RESTART:
           fullness = 40U;
