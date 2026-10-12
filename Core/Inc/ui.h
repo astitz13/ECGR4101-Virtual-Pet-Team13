@@ -16,6 +16,7 @@
 
 typedef enum
 {
+  UI_SCREEN_TITLE,      /* power-up title screen */
   UI_SCREEN_PET,        /* main screen: meters + pet */
   UI_SCREEN_AGENT,      /* pet screen after a while with no input: hat on */
   UI_SCREEN_MENU,       /* action list with highlighted selection */
@@ -34,7 +35,9 @@ typedef enum
   UI_REQUEST_RESTART    /* user held CENTER on the dead/ran-away screen */
 } UiRequest;
 
-/* Clears the screen and shows the main pet screen. Call once after ILI9341_Init(). */
+/* Clears the screen and shows the title screen, which moves on to the main
+ * pet screen on any button press or after a few seconds. Call once after
+ * ILI9341_Init(). */
 void UI_Init(void);
 
 /* Handles menu navigation for one main-loop pass. pressed/held are the

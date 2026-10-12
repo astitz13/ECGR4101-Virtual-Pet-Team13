@@ -48,6 +48,8 @@
 #define PET_ANIM_Y              (PET_AREA_Y + (PET_AREA_H - PET_ANIM_H) / 2U)
 #define UI_PROMPT_Y         262U   /* action prompt line below the pet area */
 #define GAMEOVER_ANIM_Y     92U    /* animation row on the dead/ran-away screens */
+#define TITLE_ANIM_Y        120U   /* animation row on the title screen */
+#define TITLE_MS            10000U /* title screen moves on by itself after this */
 
 
 /* No input on the pet screen for this long -> agent mode (hat on) */
@@ -94,6 +96,12 @@ static uint8_t  voice_pending;
 static uint8_t Screen_IsGameOver(UiScreen s)
 {
   return (uint8_t)((s == UI_SCREEN_DEAD) || (s == UI_SCREEN_RAN_AWAY));
+}
+
+/* Screens that use the whole display (no meters at the top) */
+static uint8_t Screen_IsFullScreen(UiScreen s)
+{
+  return (uint8_t)(Screen_IsGameOver(s) || (s == UI_SCREEN_TITLE));
 }
 
 /* Draws text centered horizontally on the screen */
@@ -321,6 +329,14 @@ static void Screen_DrawBody(void)
 
   switch (screen)
   {
+    case UI_SCREEN_TITLE:
+      UI_DrawCentered(40U, "PERRY", ILI9341_COLOR_CYAN, 4U);
+      UI_DrawCentered(80U, "THE PLATYPUS", UI_TEXT_COLOR, UI_TEXT_SIZE);
+      UI_DrawCentered(236U, "VIRTUAL PET", ILI9341_COLOR_ORANGE, UI_TEXT_SIZE);
+      UI_DrawCentered(262U, "ECGR 4101 TEAM 13", UI_HINT_COLOR, 1U);
+      UI_DrawCentered(UI_HINT_Y, "PRESS ANY BUTTON", UI_HINT_COLOR, UI_TEXT_SIZE);
+      break;
+
     case UI_SCREEN_PET:
     case UI_SCREEN_AGENT:
       ILI9341_DrawRect(PET_AREA_X, PET_AREA_Y, PET_AREA_W, PET_AREA_H, UI_HINT_COLOR);
@@ -375,7 +391,7 @@ static void Screen_DrawBody(void)
  * body below them is cleared; game-over screens use the whole display. */
 static void Screen_Show(UiScreen next, uint8_t full_redraw)
 {
-  if (Screen_IsGameOver(next) || Screen_IsGameOver(screen))
+  if (Screen_IsFullScreen(next) || Screen_IsFullScreen(screen))
   {
     full_redraw = 1U;
   }
@@ -388,7 +404,7 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
   if (full_redraw)
   {
     ILI9341_FillScreen(UI_BG_COLOR);
-    if (!Screen_IsGameOver(next))
+    if (!Screen_IsFullScreen(next))
     {
       Meters_DrawFrames();
     }
@@ -405,6 +421,10 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
   if ((next == UI_SCREEN_PET) || (next == UI_SCREEN_FEED) || (next == UI_SCREEN_GAME))
   {
     Anim_Start(&pet_anim, &anim_idle, PET_ANIM_X, PET_ANIM_Y, ui_now_ms);
+  }
+  else if (next == UI_SCREEN_TITLE)
+  {
+    Anim_Start(&pet_anim, &anim_idle, PET_ANIM_X, TITLE_ANIM_Y, ui_now_ms);
   }
   else if (next == UI_SCREEN_DEAD)
   {
@@ -465,8 +485,8 @@ void UI_Init(void)
   menu_index = 0U;
   hold_active = 0U;
   ui_now_ms = HAL_GetTick();
-  screen = UI_SCREEN_PET;
-  Screen_Show(UI_SCREEN_PET, 1U);
+  screen = UI_SCREEN_TITLE;
+  Screen_Show(UI_SCREEN_TITLE, 1U);
 }
 
 UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
@@ -494,6 +514,15 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
 
   switch (screen)
   {
+    case UI_SCREEN_TITLE:
+      /* Any button (used up here, so it doesn't also act on the next
+       * screen) or the timeout moves on to the pet screen */
+      if ((pressed != 0U) || ((now_ms - last_input_ms) >= TITLE_MS))
+      {
+        Screen_Show(UI_SCREEN_PET, 1U);
+      }
+      break;
+
     case UI_SCREEN_PET:
       if (pressed & INPUT_CENTER)
       {
@@ -602,7 +631,7 @@ void UI_PlayAction(UiRequest request)
 
 void UI_DrawMeters(uint8_t fullness, uint8_t happiness)
 {
-  if (Screen_IsGameOver(screen))
+  if (Screen_IsFullScreen(screen))
   {
     return;
   }

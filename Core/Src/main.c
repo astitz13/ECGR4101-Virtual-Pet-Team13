@@ -108,9 +108,12 @@ int main(void)
 
   /* Initialize the LCD and show a splash screen */
   ILI9341_Init(&hspi1);
+#if !UI_DEMO
+  /* The UI shows its own title screen instead of this splash */
   ILI9341_DrawString(18, 12, "GFX01M2 LCD DEMO", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
   ILI9341_DrawString(30, 40, "NUCLEO-L496ZG-P", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
   HAL_Delay(2000);
+#endif
 
 #if UI_DEMO
   /* UI + pet logic loop. Each pass: read buttons, let the UI handle
