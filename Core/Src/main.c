@@ -45,8 +45,9 @@
 #include "stdio.h"
 #include "ui.h"
 #include "input.h"
+#include "pet.h"
 
-/* Temporary UI bring-up test: 1 = run the UI screens with stand-in pet logic,
+/* Temporary UI bring-up test: 1 = run the UI screens with the pet logic,
  * 0 = run the original LCD demo pages */
 #define UI_DEMO 1
 
@@ -112,24 +113,22 @@ int main(void)
   HAL_Delay(2000);
 
 #if UI_DEMO
-  /* UI bring-up test with stand-in pet logic (until pet.c exists): meters
-   * drain by 1 per second; FEED (B1 on the feed screen) = +10 fullness,
-   * PLAY (CENTER on the game screen) = +10 happiness, VOICE = +5 happiness.
+  /* UI + pet logic loop. Each pass: read buttons, let the UI handle
+   * navigation, pass the user's request to the pet logic, play the matching
+   * animation only if the pet accepted it, advance the pet's timers, then
+   * show game-over screens and meters from the pet's state. Nothing here
+   * blocks, so input stays responsive while animations play.
    * There is no microphone on the test board, so B1 in agent mode stands in
-   * for "voice heard". Fullness 0 -> dead screen, happiness 0 -> ran-away
-   * screen; hold CENTER 2 s to restart. Timing uses HAL_GetTick(), never
-   * HAL_Delay(). */
+   * for "voice heard". */
   {
-    uint8_t fullness = 40U;
-    uint8_t happiness = 70U;
-    uint32_t last_step = HAL_GetTick();
-
+    Pet_Init(HAL_GetTick());
     UI_Init();
     while (1)
     {
       uint32_t now = HAL_GetTick();
       UiRequest request;
       uint8_t pressed;
+      bool accepted = false;
 
       Input_Update(now);
       pressed = Input_GetPressed();
@@ -142,35 +141,28 @@ int main(void)
 
       switch (request)
       {
-        case UI_REQUEST_FEED:
-          fullness = (fullness > 90U) ? 100U : (uint8_t)(fullness + 10U);
-          break;
-        case UI_REQUEST_PLAY:
-          happiness = (happiness > 90U) ? 100U : (uint8_t)(happiness + 10U);
-          break;
-        case UI_REQUEST_VOICE:
-          happiness = (happiness > 95U) ? 100U : (uint8_t)(happiness + 5U);
-          break;
-        case UI_REQUEST_RESTART:
-          fullness = 40U;
-          happiness = 70U;
-          last_step = now;
-          break;
-        default:
-          break;
+        case UI_REQUEST_FEED:    accepted = Pet_DoAction(PET_ACTION_FEED, now); break;
+        case UI_REQUEST_PLAY:    accepted = Pet_DoAction(PET_ACTION_PLAY, now); break;
+        case UI_REQUEST_VOICE:   accepted = Pet_DoAction(PET_ACTION_TALK, now); break;
+        case UI_REQUEST_RESTART: Pet_Reset(now); break;
+        default: break;
       }
-
-      if ((fullness > 0U) && (happiness > 0U) && ((now - last_step) >= 1000U))
+      if (accepted)
       {
-        last_step = now;
-        fullness--;
-        happiness--;
+        UI_PlayAction(request);
       }
 
-      if (fullness == 0U)       { UI_ShowGameOver(UI_SCREEN_DEAD); }
-      else if (happiness == 0U) { UI_ShowGameOver(UI_SCREEN_RAN_AWAY); }
+      Pet_Update(now);
 
-      UI_DrawMeters(fullness, happiness);
+      if (Pet_GetState() == PET_STATE_DEAD)
+      {
+        UI_ShowGameOver(UI_SCREEN_DEAD);
+      }
+      else if (Pet_GetState() == PET_STATE_RAN_AWAY)
+      {
+        UI_ShowGameOver(UI_SCREEN_RAN_AWAY);
+      }
+      UI_DrawMeters(Pet_GetFullness(), Pet_GetHappiness());
     }
   }
 #endif

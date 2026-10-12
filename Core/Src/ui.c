@@ -551,7 +551,6 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
       if (pressed & INPUT_B1)
       {
         request = UI_REQUEST_FEED;
-        Anim_Start(&pet_anim, &anim_eat, PET_ANIM_X, PET_ANIM_Y, now_ms);
       }
       if (pressed & INPUT_LEFT)
       {
@@ -563,7 +562,6 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
       if (pressed & INPUT_CENTER)
       {
         request = UI_REQUEST_PLAY;
-        Anim_Start(&pet_anim, &anim_happy, PET_ANIM_X, PET_ANIM_Y, now_ms);
       }
       if (pressed & INPUT_LEFT)
       {
@@ -585,6 +583,21 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
   }
 
   return request;
+}
+
+void UI_PlayAction(UiRequest request)
+{
+  const Animation *anim = NULL;
+
+  if (request == UI_REQUEST_FEED)      { anim = &anim_eat; }
+  else if (request == UI_REQUEST_PLAY) { anim = &anim_happy; }
+
+  /* Only screens with a pet area show action animations */
+  if ((anim != NULL) &&
+      ((screen == UI_SCREEN_PET) || (screen == UI_SCREEN_FEED) || (screen == UI_SCREEN_GAME)))
+  {
+    Anim_Start(&pet_anim, anim, PET_ANIM_X, PET_ANIM_Y, ui_now_ms);
+  }
 }
 
 void UI_DrawMeters(uint8_t fullness, uint8_t happiness)

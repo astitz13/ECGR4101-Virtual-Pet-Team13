@@ -42,6 +42,12 @@ void UI_Init(void);
  * HAL_GetTick(). Returns what the user asked the pet logic to do, if anything. */
 UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held);
 
+/* Plays the animation for a request the pet logic accepted (FEED -> eating,
+ * PLAY -> happy). Call it only when the pet logic returned success, so the
+ * animation always matches what actually happened to the meters. Other
+ * requests are ignored (waking from agent mode already animates itself). */
+void UI_PlayAction(UiRequest request);
+
 /* Updates the fullness and happiness meters (each 0..100, larger values are
  * clamped to 100). A meter is only redrawn when its value changed since the
  * last call, so this is cheap enough to call on every main-loop pass.
