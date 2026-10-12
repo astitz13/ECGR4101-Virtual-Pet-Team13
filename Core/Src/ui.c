@@ -47,9 +47,8 @@
 #define PET_ANIM_X              (PET_AREA_X + (PET_AREA_W - PET_ANIM_W) / 2U)
 #define PET_ANIM_Y              (PET_AREA_Y + (PET_AREA_H - PET_ANIM_H) / 2U)
 #define UI_PROMPT_Y         262U   /* action prompt line below the pet area */
+#define GAMEOVER_ANIM_Y     92U    /* animation row on the dead/ran-away screens */
 
-#define PERRY_TEAL          0x04B2U   /* RGB565 for roughly (0, 150, 150) */
-#define PERRY_HAT_BROWN     0x6204U   /* RGB565 for roughly (100, 65, 33) */
 
 /* No input on the pet screen for this long -> agent mode (hat on) */
 #define AGENT_IDLE_MS       10000U
@@ -186,124 +185,110 @@ static void Menu_Select(uint8_t index)
 
 /* ------------------------------------------------------------ animations */
 
-/* Placeholder pet drawn from rectangles until the sprite frames exist.
- * Clears the animation box, then draws the pet shifted dy px (negative = up). */
-static void Placeholder_DrawPerry(uint16_t x, uint16_t y, int16_t dy, uint8_t eyes_closed, uint8_t mouth_open)
+/* Each animation below lists, frame by frame, which of Luke's sprites goes
+ * there (31x30 px pet sprites; at scale 3 they fill the 96x96 box).
+ *
+ * Until the sprites are added, every frame shows the animation's name as a
+ * text placeholder. To add sprites, replace the body of each xxx_Draw()
+ * function with a call that draws the listed sprite for `frame` at (x, y),
+ * e.g. ILI9341_DrawImageScaled(). Frame counts and timings stay the same. */
+#define IDLE_FRAMES         4U   /* pet_idle_0, pet_idle_0, pet_idle_0, pet_blink */
+#define EAT_FRAMES          4U   /* feed_open, feed_chew, feed_open, feed_chew */
+#define HAPPY_FRAMES        4U   /* happy_0, happy_1, happy_0, happy_1 */
+#define HAT_ON_FRAMES       2U   /* hat_2, hat_4 */
+#define AGENT_FRAMES        4U   /* agent_idle_0, agent_idle_0, agent_idle_0, agent_blink */
+#define HAT_OFF_FRAMES      2U   /* hat_4, hat_2 */
+#define DEAD_FRAMES         2U   /* ghost_0, ghost_1 */
+#define RUNAWAY_FRAMES      4U   /* agent_idle_0, poof_0, poof_1, (empty box) */
+
+/* Label of the placeholder currently drawn, so an unchanged label is not
+ * redrawn every frame (keeps the main loop fast). NULL = box needs drawing. */
+static const char *placeholder_label;
+
+static void Placeholder_DrawFrame(uint16_t x, uint16_t y, const char *label)
 {
-  uint16_t top = (uint16_t)((int16_t)y + 28 + dy);
+  uint16_t label_w = (uint16_t)(strlen(label) * UI_CHAR_W(UI_TEXT_SIZE));
+  uint16_t note_w = (uint16_t)(strlen("ANIMATION") * UI_CHAR_W(1U));
+
+  if (label == placeholder_label)
+  {
+    return;
+  }
+  placeholder_label = label;
 
   ILI9341_FillRect(x, y, PET_ANIM_W, PET_ANIM_H, UI_BG_COLOR);
-
-  ILI9341_FillRect((uint16_t)(x + 16U), top, 64U, 52U, PERRY_TEAL);                 /* body */
-  if (eyes_closed)
-  {
-    ILI9341_FillRect((uint16_t)(x + 26U), (uint16_t)(top + 15U), 14U, 2U, UI_BG_COLOR);
-    ILI9341_FillRect((uint16_t)(x + 56U), (uint16_t)(top + 15U), 14U, 2U, UI_BG_COLOR);
-  }
-  else
-  {
-    ILI9341_FillRect((uint16_t)(x + 26U), (uint16_t)(top + 8U), 14U, 14U, UI_TEXT_COLOR);
-    ILI9341_FillRect((uint16_t)(x + 56U), (uint16_t)(top + 8U), 14U, 14U, UI_TEXT_COLOR);
-    ILI9341_FillRect((uint16_t)(x + 31U), (uint16_t)(top + 13U), 5U, 5U, UI_BG_COLOR);  /* pupils */
-    ILI9341_FillRect((uint16_t)(x + 61U), (uint16_t)(top + 13U), 5U, 5U, UI_BG_COLOR);
-  }
-  ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(top + 30U), 48U, 10U, ILI9341_COLOR_ORANGE);  /* beak */
-  if (mouth_open)
-  {
-    ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(top + 40U), 48U, 4U, UI_BG_COLOR);
-    ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(top + 44U), 48U, 6U, ILI9341_COLOR_ORANGE);
-  }
-  ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(top + 52U), 14U, 6U, ILI9341_COLOR_ORANGE);  /* feet */
-  ILI9341_FillRect((uint16_t)(x + 58U), (uint16_t)(top + 52U), 14U, 6U, ILI9341_COLOR_ORANGE);
+  ILI9341_DrawRect(x, y, PET_ANIM_W, PET_ANIM_H, UI_HINT_COLOR);
+  ILI9341_DrawString((uint16_t)(x + (PET_ANIM_W - label_w) / 2U), (uint16_t)(y + 34U), label,
+                     ILI9341_COLOR_ORANGE, UI_BG_COLOR, UI_TEXT_SIZE);
+  ILI9341_DrawString((uint16_t)(x + (PET_ANIM_W - note_w) / 2U), (uint16_t)(y + 56U), "ANIMATION",
+                     UI_HINT_COLOR, UI_BG_COLOR, 1U);
 }
 
-/* Agent fedora drawn above the placeholder pet. dy is the pet's offset (same
- * as Placeholder_DrawPerry), hat_dy lifts the hat above its resting spot. */
-static void Placeholder_DrawHat(uint16_t x, uint16_t y, int16_t dy, int16_t hat_dy)
-{
-  uint16_t brim = (uint16_t)((int16_t)y + 24 + dy + hat_dy);
-
-  ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(brim - 14U), 48U, 14U, PERRY_HAT_BROWN);  /* crown */
-  ILI9341_FillRect((uint16_t)(x + 24U), (uint16_t)(brim - 5U), 48U, 3U, UI_BG_COLOR);       /* band */
-  ILI9341_FillRect((uint16_t)(x + 10U), brim, 76U, 5U, PERRY_HAT_BROWN);                     /* brim */
-}
-
-/* Half-closes the eyes for the agent's serious look */
-static void Placeholder_NarrowEyes(uint16_t x, uint16_t y, int16_t dy)
-{
-  uint16_t top = (uint16_t)((int16_t)y + 28 + dy);
-
-  ILI9341_FillRect((uint16_t)(x + 26U), (uint16_t)(top + 8U), 14U, 7U, PERRY_TEAL);
-  ILI9341_FillRect((uint16_t)(x + 56U), (uint16_t)(top + 8U), 14U, 7U, PERRY_TEAL);
-}
-
-/* Idle: gentle bob with a blink on frame 2 */
+/* Idle (loops) */
 static void Idle_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  static const int8_t bob[4] = { 0, 2, 4, 2 };
-  Placeholder_DrawPerry(x, y, bob[frame], (uint8_t)(frame == 2U), 0U);
+  (void)frame;
+  Placeholder_DrawFrame(x, y, "IDLE");
 }
 
-/* Eating: food drops in (frames 0-2), then chomps (frames 3-5) */
+/* Eating, after each accepted feed (plays once) */
 static void Eat_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  static const uint8_t food_y[3] = { 0U, 8U, 16U };
-
-  Placeholder_DrawPerry(x, y, 0, 0U, (uint8_t)((frame < 3U) || (frame == 4U)));
-  if (frame < 3U)
-  {
-    ILI9341_FillRect((uint16_t)(x + 42U), (uint16_t)(y + food_y[frame]), 12U, 12U, ILI9341_COLOR_YELLOW);
-  }
+  (void)frame;
+  Placeholder_DrawFrame(x, y, "EATING");
 }
 
-/* Playing: two happy jumps */
-static void Play_Draw(uint8_t frame, uint16_t x, uint16_t y)
+/* Happy, after playing (plays once) */
+static void Happy_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  static const int8_t jump[7] = { 0, -8, -14, -8, 0, -6, 0 };
-  Placeholder_DrawPerry(x, y, jump[frame], 0U, (uint8_t)(jump[frame] < 0));
+  (void)frame;
+  Placeholder_DrawFrame(x, y, "HAPPY");
 }
 
-/* Agent mode starts: the hat drops onto his head, then the eyes narrow */
+/* Agent mode starts: hat goes on (plays once) */
 static void HatOn_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  static const int8_t hat_dy[5] = { -10, -6, -3, 0, 0 };
-
-  Placeholder_DrawPerry(x, y, 0, 0U, 0U);
-  Placeholder_DrawHat(x, y, 0, hat_dy[frame]);
-  if (frame == 4U)
-  {
-    Placeholder_NarrowEyes(x, y, 0);
-  }
+  (void)frame;
+  Placeholder_DrawFrame(x, y, "HAT ON");
 }
 
-/* Agent idle: hat on, eyes narrowed, slow sway */
+/* Agent mode idle, hat on (loops) */
 static void AgentIdle_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  int16_t dy = (frame == 0U) ? 0 : 2;
-
-  Placeholder_DrawPerry(x, y, dy, 0U, 0U);
-  Placeholder_DrawHat(x, y, dy, 0);
-  Placeholder_NarrowEyes(x, y, dy);
+  (void)frame;
+  Placeholder_DrawFrame(x, y, "AGENT");
 }
 
-/* Called back: the hat lifts off and he looks happy */
+/* Called back out of agent mode: hat comes off (plays once) */
 static void HatOff_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  static const int8_t hat_dy[4] = { -3, -6, -10, 0 };
-
-  Placeholder_DrawPerry(x, y, 0, 0U, (uint8_t)(frame == 3U));
-  if (frame < 3U)
-  {
-    Placeholder_DrawHat(x, y, 0, hat_dy[frame]);
-  }
+  (void)frame;
+  Placeholder_DrawFrame(x, y, "HAT OFF");
 }
 
-static const Animation anim_idle       = { Idle_Draw,       4U, 300U, 1U };
-static const Animation anim_eat        = { Eat_Draw,        6U, 180U, 0U };
-static const Animation anim_play       = { Play_Draw,       7U, 120U, 0U };
-static const Animation anim_hat_on     = { HatOn_Draw,      5U, 200U, 0U };
-static const Animation anim_agent_idle = { AgentIdle_Draw,  2U, 600U, 1U };
-static const Animation anim_hat_off    = { HatOff_Draw,     4U, 180U, 0U };
+/* Dead: ghost with halo (loops) */
+static void Dead_Draw(uint8_t frame, uint16_t x, uint16_t y)
+{
+  (void)frame;
+  Placeholder_DrawFrame(x, y, "DEAD");
+}
+
+/* Ran away: agent vanishes in a puff of smoke (plays once; last frame is an
+ * empty box and stays on screen) */
+static void RunAway_Draw(uint8_t frame, uint16_t x, uint16_t y)
+{
+  (void)frame;
+  Placeholder_DrawFrame(x, y, "RUN AWAY");
+}
+
+static const Animation anim_idle       = { Idle_Draw,      IDLE_FRAMES,    300U, 1U };
+static const Animation anim_eat        = { Eat_Draw,       EAT_FRAMES,     200U, 0U };
+static const Animation anim_happy      = { Happy_Draw,     HAPPY_FRAMES,   200U, 0U };
+static const Animation anim_hat_on     = { HatOn_Draw,     HAT_ON_FRAMES,  300U, 0U };
+static const Animation anim_agent_idle = { AgentIdle_Draw, AGENT_FRAMES,   400U, 1U };
+static const Animation anim_hat_off    = { HatOff_Draw,    HAT_OFF_FRAMES, 300U, 0U };
+static const Animation anim_dead       = { Dead_Draw,      DEAD_FRAMES,    500U, 1U };
+static const Animation anim_runaway    = { RunAway_Draw,   RUNAWAY_FRAMES, 300U, 0U };
 
 /* --------------------------------------------------------------- screens */
 
@@ -366,16 +351,16 @@ static void Screen_DrawBody(void)
       break;
 
     case UI_SCREEN_DEAD:
-      UI_DrawCentered(100U, "PERRY", ILI9341_COLOR_RED, 3U);
-      UI_DrawCentered(130U, "DIED", ILI9341_COLOR_RED, 3U);
+      UI_DrawCentered(20U, "PERRY", ILI9341_COLOR_RED, 3U);
+      UI_DrawCentered(48U, "DIED", ILI9341_COLOR_RED, 3U);
       UI_DrawCentered(200U, "HOLD CENTER", UI_TEXT_COLOR, UI_TEXT_SIZE);
       UI_DrawCentered(224U, "TO RESTART", UI_TEXT_COLOR, UI_TEXT_SIZE);
       Restart_DrawBar();
       break;
 
     case UI_SCREEN_RAN_AWAY:
-      UI_DrawCentered(100U, "PERRY", ILI9341_COLOR_YELLOW, 3U);
-      UI_DrawCentered(130U, "RAN AWAY", ILI9341_COLOR_YELLOW, 3U);
+      UI_DrawCentered(20U, "PERRY", ILI9341_COLOR_YELLOW, 3U);
+      UI_DrawCentered(48U, "RAN AWAY", ILI9341_COLOR_YELLOW, 3U);
       UI_DrawCentered(200U, "HOLD CENTER", UI_TEXT_COLOR, UI_TEXT_SIZE);
       UI_DrawCentered(224U, "TO RESTART", UI_TEXT_COLOR, UI_TEXT_SIZE);
       Restart_DrawBar();
@@ -396,6 +381,7 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
   }
   screen = next;
   Anim_Stop(&pet_anim);
+  placeholder_label = NULL;
   last_input_ms = ui_now_ms;   /* agent-mode countdown restarts on every screen change */
   voice_pending = 0U;
 
@@ -414,10 +400,19 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
 
   Screen_DrawBody();
 
-  /* Screens with a pet area start out with the idle animation */
+  /* Screens with a pet area start out with the idle animation;
+   * game-over screens play their own animation */
   if ((next == UI_SCREEN_PET) || (next == UI_SCREEN_FEED) || (next == UI_SCREEN_GAME))
   {
     Anim_Start(&pet_anim, &anim_idle, PET_ANIM_X, PET_ANIM_Y, ui_now_ms);
+  }
+  else if (next == UI_SCREEN_DEAD)
+  {
+    Anim_Start(&pet_anim, &anim_dead, PET_ANIM_X, GAMEOVER_ANIM_Y, ui_now_ms);
+  }
+  else if (next == UI_SCREEN_RAN_AWAY)
+  {
+    Anim_Start(&pet_anim, &anim_runaway, PET_ANIM_X, GAMEOVER_ANIM_Y, ui_now_ms);
   }
 }
 
@@ -484,11 +479,17 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
     last_input_ms = now_ms;
   }
 
-  /* Advance the pet animation; when a one-shot ends, return to the matching idle loop */
+  /* Advance the pet animation; when a one-shot ends, start what follows it */
   if (Anim_Update(&pet_anim, now_ms))
   {
-    Anim_Start(&pet_anim, (screen == UI_SCREEN_AGENT) ? &anim_agent_idle : &anim_idle,
-               PET_ANIM_X, PET_ANIM_Y, now_ms);
+    if (screen == UI_SCREEN_AGENT)
+    {
+      Anim_Start(&pet_anim, &anim_agent_idle, PET_ANIM_X, PET_ANIM_Y, now_ms);
+    }
+    else if (screen != UI_SCREEN_RAN_AWAY)   /* ran away: empty box stays, nothing follows */
+    {
+      Anim_Start(&pet_anim, &anim_idle, PET_ANIM_X, PET_ANIM_Y, now_ms);
+    }
   }
 
   switch (screen)
@@ -562,7 +563,7 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
       if (pressed & INPUT_CENTER)
       {
         request = UI_REQUEST_PLAY;
-        Anim_Start(&pet_anim, &anim_play, PET_ANIM_X, PET_ANIM_Y, now_ms);
+        Anim_Start(&pet_anim, &anim_happy, PET_ANIM_X, PET_ANIM_Y, now_ms);
       }
       if (pressed & INPUT_LEFT)
       {
