@@ -13,6 +13,7 @@
 #include "ili9341.h"
 #include "input.h"
 #include "anim.h"
+#include "sound.h"
 #include <string.h>
 
 #define UI_BG_COLOR         ILI9341_COLOR_BLACK
@@ -50,6 +51,13 @@
 #define GAMEOVER_ANIM_Y     92U    /* animation row on the dead/ran-away screens */
 #define TITLE_ANIM_Y        120U   /* animation row on the title screen */
 #define TITLE_MS            10000U /* title screen moves on by itself after this */
+
+/* Sound cue placeholder: 1 = also show each cue as text in the bottom strip
+ * of the screen for SOUND_CUE_SHOW_MS (useful until every cue has a real
+ * sound, and on boards without a speaker); 0 = sound only */
+#define UI_SHOW_SOUND_CUES  1
+#define SOUND_CUE_Y         312U
+#define SOUND_CUE_SHOW_MS   1000U
 
 
 /* No input on the pet screen for this long -> agent mode (hat on) */
@@ -92,6 +100,10 @@ static uint32_t   ui_now_ms;
  * last UI_Update() (set by UI_NotifyVoice()) */
 static uint32_t last_input_ms;
 static uint8_t  voice_pending;
+
+/* Sound cue placeholder text currently shown, and when it was drawn */
+static uint8_t  cue_shown;
+static uint32_t cue_shown_ms;
 
 static uint8_t Screen_IsGameOver(UiScreen s)
 {
@@ -478,6 +490,23 @@ static uint8_t Restart_UpdateHold(uint32_t now_ms, uint8_t held)
   return 0U;
 }
 
+/* ------------------------------------------------------------ sound cues */
+
+/* Plays a sound cue and, while UI_SHOW_SOUND_CUES is 1, shows its name in the
+ * bottom strip of the screen (cleared again by UI_Update after a second) */
+static void UI_Cue(SoundCue cue)
+{
+  Sound_Play(cue);
+#if UI_SHOW_SOUND_CUES
+  ILI9341_FillRect(0U, SOUND_CUE_Y, ILI9341_WIDTH, (uint16_t)(ILI9341_HEIGHT - SOUND_CUE_Y), UI_BG_COLOR);
+  ILI9341_DrawString(2U, SOUND_CUE_Y, "SOUND:", UI_HINT_COLOR, UI_BG_COLOR, 1U);
+  ILI9341_DrawString((uint16_t)(2U + 7U * UI_CHAR_W(1U)), SOUND_CUE_Y, Sound_GetName(cue),
+                     ILI9341_COLOR_MAGENTA, UI_BG_COLOR, 1U);
+  cue_shown = 1U;
+  cue_shown_ms = ui_now_ms;
+#endif
+}
+
 /* ------------------------------------------------------------ public API */
 
 void UI_Init(void)
@@ -497,6 +526,12 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
   if ((pressed | held) != 0U)
   {
     last_input_ms = now_ms;
+  }
+
+  if (cue_shown && ((now_ms - cue_shown_ms) >= SOUND_CUE_SHOW_MS))
+  {
+    ILI9341_FillRect(0U, SOUND_CUE_Y, ILI9341_WIDTH, (uint16_t)(ILI9341_HEIGHT - SOUND_CUE_Y), UI_BG_COLOR);
+    cue_shown = 0U;
   }
 
   /* Advance the pet animation; when a one-shot ends, start what follows it */
@@ -536,6 +571,7 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
         voice_pending = 0U;
         PetScreen_DrawPrompts();
         Anim_Start(&pet_anim, &anim_hat_on, PET_ANIM_X, PET_ANIM_Y, now_ms);
+        UI_Cue(SOUND_HAT_ON);
       }
       break;
 
@@ -554,6 +590,7 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
         last_input_ms = now_ms;
         PetScreen_DrawPrompts();
         Anim_Start(&pet_anim, &anim_hat_off, PET_ANIM_X, PET_ANIM_Y, now_ms);
+        UI_Cue(SOUND_HAT_OFF);
       }
       break;
 
@@ -618,8 +655,21 @@ void UI_PlayAction(UiRequest request)
 {
   const Animation *anim = NULL;
 
-  if (request == UI_REQUEST_FEED)      { anim = &anim_eat; }
-  else if (request == UI_REQUEST_PLAY) { anim = &anim_happy; }
+  if (request == UI_REQUEST_FEED)
+  {
+    anim = &anim_eat;
+    UI_Cue(SOUND_FEED);
+  }
+  else if (request == UI_REQUEST_PLAY)
+  {
+    anim = &anim_happy;
+    UI_Cue(SOUND_HAPPY);
+  }
+  else if (request == UI_REQUEST_VOICE)
+  {
+    /* Talking raises happiness; the hat-off animation is already playing */
+    UI_Cue(SOUND_HAPPY);
+  }
 
   /* Only screens with a pet area show action animations */
   if ((anim != NULL) &&
@@ -659,6 +709,7 @@ void UI_ShowGameOver(UiScreen which)
   }
   hold_active = 0U;
   Screen_Show(which, 1U);
+  UI_Cue(SOUND_GAME_OVER);
 }
 
 void UI_NotifyVoice(void)
