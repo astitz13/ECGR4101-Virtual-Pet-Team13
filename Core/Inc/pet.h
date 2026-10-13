@@ -18,6 +18,9 @@
 
 #define PET_FULLNESS_DECAY_INTERVAL_MS 3000U
 #define PET_HAPPINESS_DECAY_INTERVAL_MS 4000U
+/* Faster rates used only when Pet_SetDemoMode(true, ...) is called. */
+#define PET_DEMO_FULLNESS_DECAY_INTERVAL_MS 250U
+#define PET_DEMO_HAPPINESS_DECAY_INTERVAL_MS 333U
 #define PET_FEED_FULLNESS_CHANGE       10U
 #define PET_PLAY_HAPPINESS_CHANGE     15U
 #define PET_TALK_HAPPINESS_CHANGE     15U
@@ -64,6 +67,13 @@ bool Pet_DoAction(PetAction action, uint32_t now_ms);
  * Returns false if the pet has died or run away, or if max_score is zero.
  */
 bool Pet_AwardGameHappiness(uint8_t score, uint8_t max_score, uint32_t now_ms);
+
+/**
+ * Enable or disable fast decay for a presentation/demo. Changing modes resets
+ * the decay timers, so switching modes never applies a backlog of decay.
+ */
+void Pet_SetDemoMode(bool enabled, uint32_t now_ms);
+bool Pet_IsDemoMode(void);
 
 /** Restart the pet after it has died or run away. */
 void Pet_Reset(uint32_t now_ms);

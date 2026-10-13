@@ -9,6 +9,7 @@ typedef struct
   /* Current meter values exposed through the getter functions. */
   uint8_t fullness;
   uint8_t happiness;
+  bool demo_mode;
 
   /* Current visual/behavioral state and the time it began. */
   PetState state;
@@ -21,6 +22,18 @@ typedef struct
 
 /* This module manages one pet, so its state is private to this source file. */
 static Pet pet;
+
+static uint32_t Pet_GetFullnessDecayIntervalMs(void)
+{
+  return pet.demo_mode ? PET_DEMO_FULLNESS_DECAY_INTERVAL_MS :
+                         PET_FULLNESS_DECAY_INTERVAL_MS;
+}
+
+static uint32_t Pet_GetHappinessDecayIntervalMs(void)
+{
+  return pet.demo_mode ? PET_DEMO_HAPPINESS_DECAY_INTERVAL_MS :
+                         PET_HAPPINESS_DECAY_INTERVAL_MS;
+}
 
 /* Enter a permanent terminal state when either meter reaches its limit. */
 static void Pet_CheckTerminalState(uint32_t now_ms)
@@ -55,6 +68,7 @@ void Pet_Init(uint32_t now_ms)
   /* A new pet begins full, happy, and not performing an action. */
   pet.fullness = PET_VALUE_MAX;
   pet.happiness = PET_VALUE_MAX;
+  pet.demo_mode = false;
   pet.state = PET_STATE_IDLE;
   pet.state_start_ms = now_ms;
   pet.last_fullness_decay_ms = now_ms;
@@ -76,20 +90,23 @@ void Pet_Update(uint32_t now_ms)
    * Compute how many full intervals elapsed. Keeping the remainder by
    * advancing the timestamp prevents loop speed from changing decay rates.
    */
+  uint32_t fullness_interval_ms = Pet_GetFullnessDecayIntervalMs();
+  uint32_t happiness_interval_ms = Pet_GetHappinessDecayIntervalMs();
+
   elapsed_fullness_ms = now_ms - pet.last_fullness_decay_ms;
-  if (elapsed_fullness_ms >= PET_FULLNESS_DECAY_INTERVAL_MS)
+  if (elapsed_fullness_ms >= fullness_interval_ms)
   {
-    uint32_t steps = elapsed_fullness_ms / PET_FULLNESS_DECAY_INTERVAL_MS;
+    uint32_t steps = elapsed_fullness_ms / fullness_interval_ms;
     Pet_DecreaseValue(&pet.fullness, steps);
-    pet.last_fullness_decay_ms += steps * PET_FULLNESS_DECAY_INTERVAL_MS;
+    pet.last_fullness_decay_ms += steps * fullness_interval_ms;
   }
 
   elapsed_happiness_ms = now_ms - pet.last_happiness_decay_ms;
-  if (elapsed_happiness_ms >= PET_HAPPINESS_DECAY_INTERVAL_MS)
+  if (elapsed_happiness_ms >= happiness_interval_ms)
   {
-    uint32_t steps = elapsed_happiness_ms / PET_HAPPINESS_DECAY_INTERVAL_MS;
+    uint32_t steps = elapsed_happiness_ms / happiness_interval_ms;
     Pet_DecreaseValue(&pet.happiness, steps);
-    pet.last_happiness_decay_ms += steps * PET_HAPPINESS_DECAY_INTERVAL_MS;
+    pet.last_happiness_decay_ms += steps * happiness_interval_ms;
   }
 
   Pet_CheckTerminalState(now_ms);
@@ -179,6 +196,22 @@ bool Pet_AwardGameHappiness(uint8_t score, uint8_t max_score, uint32_t now_ms)
   pet.state = PET_STATE_PLAYING;
   pet.state_start_ms = now_ms;
   return true;
+}
+
+void Pet_SetDemoMode(bool enabled, uint32_t now_ms)
+{
+  if (pet.demo_mode != enabled)
+  {
+    pet.demo_mode = enabled;
+    /* Start each meter's new decay rate from the moment of the mode change. */
+    pet.last_fullness_decay_ms = now_ms;
+    pet.last_happiness_decay_ms = now_ms;
+  }
+}
+
+bool Pet_IsDemoMode(void)
+{
+  return pet.demo_mode;
 }
 
 void Pet_Reset(uint32_t now_ms)
