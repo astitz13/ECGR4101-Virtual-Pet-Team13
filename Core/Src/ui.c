@@ -13,6 +13,7 @@
 #include "ili9341.h"
 #include "input.h"
 #include "anim.h"
+#include "imported_images.h"
 #include "sound.h"
 #include <string.h>
 
@@ -205,100 +206,116 @@ static void Menu_Select(uint8_t index)
 
 /* ------------------------------------------------------------ animations */
 
-/* Each animation below lists, frame by frame, which of Luke's sprites goes
- * there (31x30 px pet sprites; at scale 3 they fill the 96x96 box).
- *
- * Until the sprites are added, every frame shows the animation's name as a
- * text placeholder. To add sprites, replace the body of each xxx_Draw()
- * function with a call that draws the listed sprite for `frame` at (x, y),
- * e.g. ILI9341_DrawImageScaled(). Frame counts and timings stay the same. */
+/* Each animation below lists, frame by frame, which sprite is drawn. The
+ * sprites are 31x30 px (Assets/sprites, converted into imported_images.c);
+ * at scale 3 they are 93x90 and sit centered in the 96x96 animation box.
+ * Every pet sprite has the same size and a solid background, so drawing a
+ * frame fully covers the one before it and nothing has to be erased. */
+#define PET_SPRITE_W        IMG_PET_IDLE_0_WIDTH
+#define PET_SPRITE_H        IMG_PET_IDLE_0_HEIGHT
+#define PET_SPRITE_SCALE    3U
+#define PET_SPRITE_DX       ((PET_ANIM_W - PET_SPRITE_W * PET_SPRITE_SCALE) / 2U)
+#define PET_SPRITE_DY       ((PET_ANIM_H - PET_SPRITE_H * PET_SPRITE_SCALE) / 2U)
+
 #define IDLE_FRAMES         4U   /* pet_idle_0, pet_idle_0, pet_idle_0, pet_blink */
 #define EAT_FRAMES          4U   /* feed_open, feed_chew, feed_open, feed_chew */
 #define HAPPY_FRAMES        4U   /* happy_0, happy_1, happy_0, happy_1 */
-#define HAT_ON_FRAMES       2U   /* hat_2, hat_4 */
+#define HAT_ON_FRAMES       2U   /* hat_4 (crouch, no hat), hat_2 (hat going on) */
 #define AGENT_FRAMES        4U   /* agent_idle_0, agent_idle_0, agent_idle_0, agent_blink */
-#define HAT_OFF_FRAMES      2U   /* hat_4, hat_2 */
+#define HAT_OFF_FRAMES      2U   /* hat_2 (hat lifting), hat_4 (crouch, no hat) */
 #define DEAD_FRAMES         2U   /* ghost_0, ghost_1 */
 #define RUNAWAY_FRAMES      4U   /* agent_idle_0, poof_0, poof_1, (empty box) */
 
-/* Label of the placeholder currently drawn, so an unchanged label is not
- * redrawn every frame (keeps the main loop fast). NULL = box needs drawing. */
-static const char *placeholder_label;
+/* Sprite currently on screen, so a frame that repeats the same sprite is not
+ * sent to the LCD again (keeps the main loop fast). NULL = box needs drawing. */
+static const image_pixel_t *drawn_sprite;
+static uint8_t sprite_box_empty;
 
-static void Placeholder_DrawFrame(uint16_t x, uint16_t y, const char *label)
+/* Draws one pet sprite in the animation box at (x, y). A NULL sprite clears
+ * the box, which is the last frame of the runaway animation. */
+static void Sprite_DrawFrame(uint16_t x, uint16_t y, const image_pixel_t *sprite)
 {
-  uint16_t label_w = (uint16_t)(strlen(label) * UI_CHAR_W(UI_TEXT_SIZE));
-  uint16_t note_w = (uint16_t)(strlen("ANIMATION") * UI_CHAR_W(1U));
-
-  if (label == placeholder_label)
+  if (sprite == NULL)
+  {
+    if (!sprite_box_empty)
+    {
+      ILI9341_FillRect(x, y, PET_ANIM_W, PET_ANIM_H, UI_BG_COLOR);
+      sprite_box_empty = 1U;
+      drawn_sprite = NULL;
+    }
+    return;
+  }
+  if (sprite == drawn_sprite)
   {
     return;
   }
-  placeholder_label = label;
+  drawn_sprite = sprite;
+  sprite_box_empty = 0U;
 
-  ILI9341_FillRect(x, y, PET_ANIM_W, PET_ANIM_H, UI_BG_COLOR);
-  ILI9341_DrawRect(x, y, PET_ANIM_W, PET_ANIM_H, UI_HINT_COLOR);
-  ILI9341_DrawString((uint16_t)(x + (PET_ANIM_W - label_w) / 2U), (uint16_t)(y + 34U), label,
-                     ILI9341_COLOR_ORANGE, UI_BG_COLOR, UI_TEXT_SIZE);
-  ILI9341_DrawString((uint16_t)(x + (PET_ANIM_W - note_w) / 2U), (uint16_t)(y + 56U), "ANIMATION",
-                     UI_HINT_COLOR, UI_BG_COLOR, 1U);
+  ILI9341_DrawImageScaled((uint16_t)(x + PET_SPRITE_DX), (uint16_t)(y + PET_SPRITE_DY),
+                          PET_SPRITE_W, PET_SPRITE_H, (image_pixel_t *)sprite, PET_SPRITE_SCALE);
 }
 
 /* Idle (loops) */
 static void Idle_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "IDLE");
+  static const image_pixel_t *const frames[IDLE_FRAMES] =
+    { IMG_PET_IDLE_0, IMG_PET_IDLE_0, IMG_PET_IDLE_0, IMG_PET_BLINK };
+  Sprite_DrawFrame(x, y, frames[frame]);
 }
 
 /* Eating, after each accepted feed (plays once) */
 static void Eat_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "EATING");
+  static const image_pixel_t *const frames[EAT_FRAMES] =
+    { IMG_FEED_OPEN, IMG_FEED_CHEW, IMG_FEED_OPEN, IMG_FEED_CHEW };
+  Sprite_DrawFrame(x, y, frames[frame]);
 }
 
 /* Happy, after playing (plays once) */
 static void Happy_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "HAPPY");
+  static const image_pixel_t *const frames[HAPPY_FRAMES] =
+    { IMG_HAPPY_0, IMG_HAPPY_1, IMG_HAPPY_0, IMG_HAPPY_1 };
+  Sprite_DrawFrame(x, y, frames[frame]);
 }
 
 /* Agent mode starts: hat goes on (plays once) */
 static void HatOn_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "HAT ON");
+  static const image_pixel_t *const frames[HAT_ON_FRAMES] = { IMG_HAT_4, IMG_HAT_2 };
+  Sprite_DrawFrame(x, y, frames[frame]);
 }
 
 /* Agent mode idle, hat on (loops) */
 static void AgentIdle_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "AGENT");
+  static const image_pixel_t *const frames[AGENT_FRAMES] =
+    { IMG_AGENT_IDLE_0, IMG_AGENT_IDLE_0, IMG_AGENT_IDLE_0, IMG_AGENT_BLINK };
+  Sprite_DrawFrame(x, y, frames[frame]);
 }
 
 /* Called back out of agent mode: hat comes off (plays once) */
 static void HatOff_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "HAT OFF");
+  static const image_pixel_t *const frames[HAT_OFF_FRAMES] = { IMG_HAT_2, IMG_HAT_4 };
+  Sprite_DrawFrame(x, y, frames[frame]);
 }
 
 /* Dead: ghost with halo (loops) */
 static void Dead_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "DEAD");
+  static const image_pixel_t *const frames[DEAD_FRAMES] = { IMG_GHOST_0, IMG_GHOST_1 };
+  Sprite_DrawFrame(x, y, frames[frame]);
 }
 
 /* Ran away: agent vanishes in a puff of smoke (plays once; last frame is an
  * empty box and stays on screen) */
 static void RunAway_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "RUN AWAY");
+  static const image_pixel_t *const frames[RUNAWAY_FRAMES] =
+    { IMG_AGENT_IDLE_0, IMG_POOF_0, IMG_POOF_1, NULL };
+  Sprite_DrawFrame(x, y, frames[frame]);
 }
 
 static const Animation anim_idle       = { Idle_Draw,      IDLE_FRAMES,    300U, 1U };
@@ -409,7 +426,8 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
   }
   screen = next;
   Anim_Stop(&pet_anim);
-  placeholder_label = NULL;
+  drawn_sprite = NULL;
+  sprite_box_empty = 0U;
   last_input_ms = ui_now_ms;   /* agent-mode countdown restarts on every screen change */
   voice_pending = 0U;
 
