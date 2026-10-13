@@ -4,7 +4,38 @@ from PIL import Image
 # File name should be the relative file name from this "Assets" directory
 # Image name should be what is used to reference the image in code
 # Width and height are the dimensions of the image in pixels
-IMAGE_LIST = [("demo_rickroll.webp", "IMG_RICKROLL", 150, 100), ("demo_rickroll.webp", "IMG_SMALL_RICKROLL", 30, 20)]
+IMAGE_LIST = [
+    ("demo_rickroll.webp", "IMG_RICKROLL", 150, 100),
+    ("demo_rickroll.webp", "IMG_SMALL_RICKROLL", 30, 20),
+    # Perry sprites: every 31x30 frame shares one box and has a solid 0x6DBC background,
+    # so any frame can be drawn over the previous one at the same x, y.
+    ("sprites/pet_idle_0.png", "IMG_PET_IDLE_0", 31, 30),
+    ("sprites/pet_blink.png", "IMG_PET_BLINK", 31, 30),
+    ("sprites/feed_open.png", "IMG_FEED_OPEN", 31, 30),
+    ("sprites/feed_chew.png", "IMG_FEED_CHEW", 31, 30),
+    ("sprites/happy_0.png", "IMG_HAPPY_0", 31, 30),
+    ("sprites/happy_1.png", "IMG_HAPPY_1", 31, 30),
+    ("sprites/agent_idle_0.png", "IMG_AGENT_IDLE_0", 31, 30),
+    ("sprites/agent_blink.png", "IMG_AGENT_BLINK", 31, 30),
+    ("sprites/hat_2.png", "IMG_HAT_2", 31, 30),
+    ("sprites/hat_4.png", "IMG_HAT_4", 31, 30),
+    ("sprites/game_run_0.png", "IMG_GAME_RUN_0", 31, 30),
+    ("sprites/game_run_1.png", "IMG_GAME_RUN_1", 31, 30),
+    ("sprites/game_catch.png", "IMG_GAME_CATCH", 31, 30),
+    ("sprites/game_hit.png", "IMG_GAME_HIT", 31, 30),
+    ("sprites/ghost_0.png", "IMG_GHOST_0", 31, 30),
+    ("sprites/ghost_1.png", "IMG_GHOST_1", 31, 30),
+    ("sprites/poof_0.png", "IMG_POOF_0", 31, 30),
+    ("sprites/poof_1.png", "IMG_POOF_1", 31, 30),
+    # Small 16x16 items with transparent backgrounds
+    ("sprites/fish_0.png", "IMG_FISH_0", 16, 16),
+    ("sprites/fish_1.png", "IMG_FISH_1", 16, 16),
+    ("sprites/mini_hat.png", "IMG_MINI_HAT", 16, 16),
+    ("sprites/bomb_0.png", "IMG_BOMB_0", 16, 16),
+    ("sprites/heart.png", "IMG_HEART", 16, 16),
+    ("sprites/miss.png", "IMG_MISS", 16, 16),
+    ("sprites/icon_game.png", "IMG_ICON_GAME", 16, 16),
+]
 
 # Relative paths to header and C files for image import
 OUTPUT_HEADER_FILE = "../Core/Inc/imported_images.h"
