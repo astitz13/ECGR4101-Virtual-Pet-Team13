@@ -43,6 +43,13 @@
 #include "sensors.h"
 #include "string.h"
 #include "stdio.h"
+#include "ui.h"
+#include "input.h"
+#include "pet.h"
+
+/* Temporary UI bring-up test: 1 = run the UI screens with the pet logic,
+ * 0 = run the original LCD demo pages */
+#define UI_DEMO 1
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
@@ -101,9 +108,67 @@ int main(void)
 
   /* Initialize the LCD and show a splash screen */
   ILI9341_Init(&hspi1);
+#if !UI_DEMO
+  /* The UI shows its own title screen instead of this splash */
   ILI9341_DrawString(18, 12, "GFX01M2 LCD DEMO", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
   ILI9341_DrawString(30, 40, "NUCLEO-L496ZG-P", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
   HAL_Delay(2000);
+#endif
+
+#if UI_DEMO
+  /* UI + pet logic loop. Each pass: read buttons, let the UI handle
+   * navigation, pass the user's request to the pet logic, play the matching
+   * animation only if the pet accepted it, advance the pet's timers, then
+   * show game-over screens and meters from the pet's state. Nothing here
+   * blocks, so input stays responsive while animations play.
+   * There is no microphone on the test board, so B1 in agent mode stands in
+   * for "voice heard". */
+  {
+    Pet_Init(HAL_GetTick());
+    UI_Init();
+    while (1)
+    {
+      uint32_t now = HAL_GetTick();
+      UiRequest request;
+      uint8_t pressed;
+      bool accepted = false;
+
+      Input_Update(now);
+      pressed = Input_GetPressed();
+      if ((UI_GetScreen() == UI_SCREEN_AGENT) && (pressed & INPUT_B1))
+      {
+        UI_NotifyVoice();
+        pressed &= (uint8_t)~INPUT_B1;
+      }
+      request = UI_Update(now, pressed, Input_GetHeld());
+
+      switch (request)
+      {
+        case UI_REQUEST_FEED:    accepted = Pet_DoAction(PET_ACTION_FEED, now); break;
+        case UI_REQUEST_PLAY:    accepted = Pet_DoAction(PET_ACTION_PLAY, now); break;
+        case UI_REQUEST_VOICE:   accepted = Pet_DoAction(PET_ACTION_TALK, now); break;
+        case UI_REQUEST_RESTART: Pet_Reset(now); break;
+        default: break;
+      }
+      if (accepted)
+      {
+        UI_PlayAction(request);
+      }
+
+      Pet_Update(now);
+
+      if (Pet_GetState() == PET_STATE_DEAD)
+      {
+        UI_ShowGameOver(UI_SCREEN_DEAD);
+      }
+      else if (Pet_GetState() == PET_STATE_RAN_AWAY)
+      {
+        UI_ShowGameOver(UI_SCREEN_RAN_AWAY);
+      }
+      UI_DrawMeters(Pet_GetFullness(), Pet_GetHappiness());
+    }
+  }
+#endif
 
   /* Infinite loop: cycle through the demo pages */
   startAudio((int8_t*)&AUDIO_PERRY, AUDIO_PERRY_SAMPLES);
