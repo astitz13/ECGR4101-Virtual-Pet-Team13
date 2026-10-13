@@ -32,24 +32,18 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "audio.h"
-#include "cmsis_gcc.h"
 #include "ili9341.h"
 #include "gfx01m2_conf.h"
-#include "imported_audio.h"
-#include "imported_images.h"
 #include "microphone.h"
-#include "mpu6050.h"
 #include "sensors.h"
-#include "string.h"
-#include "stdio.h"
 #include "ui.h"
 #include "input.h"
 #include "pet.h"
 
-/* Temporary UI bring-up test: 1 = run the UI screens with the pet logic,
- * 0 = run the original LCD demo pages */
-#define UI_DEMO 1
+#define MIC_SOUND_THRESHOLD     1.0f
+#define MIC_WARMUP_MS           150U
+#define MIC_CHECK_INTERVAL_MS   50U
+
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
@@ -58,34 +52,7 @@ SPI_HandleTypeDef hspi1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
-
-static void Demo_ColorBars(void);
-static void Demo_Images(void);
-static void Demo_Shapes(void);
-static void Demo_Text(void);
-static void Demo_Joystick(void);
-static void Demo_Microphone(void);
-
-/* Joystick (B1) bit flags returned by Joystick_Read() */
-#define JOY_LEFT_MASK   (1U << 0)
-#define JOY_CENTER_MASK (1U << 1)
-#define JOY_DOWN_MASK   (1U << 2)
-#define JOY_RIGHT_MASK  (1U << 3)
-#define JOY_UP_MASK     (1U << 4)
-
-static uint8_t Joystick_Read(void)
-{
-  uint8_t state = 0;
-
-  /* All five directions are active low (see gfx01m2_conf.h) */
-  if (HAL_GPIO_ReadPin(JOY_LEFT_GPIO_Port, JOY_LEFT_Pin) == GPIO_PIN_RESET)     { state |= JOY_LEFT_MASK; }
-  if (HAL_GPIO_ReadPin(JOY_CENTER_GPIO_Port, JOY_CENTER_Pin) == GPIO_PIN_RESET) { state |= JOY_CENTER_MASK; }
-  if (HAL_GPIO_ReadPin(JOY_DOWN_GPIO_Port, JOY_DOWN_Pin) == GPIO_PIN_RESET)     { state |= JOY_DOWN_MASK; }
-  if (HAL_GPIO_ReadPin(JOY_RIGHT_GPIO_Port, JOY_RIGHT_Pin) == GPIO_PIN_RESET)   { state |= JOY_RIGHT_MASK; }
-  if (HAL_GPIO_ReadPin(JOY_UP_GPIO_Port, JOY_UP_Pin) == GPIO_PIN_RESET)         { state |= JOY_UP_MASK; }
-
-  return state;
-}
+static bool Microphone_HeardSound(void);
 
 /**
   * @brief  The application entry point.
@@ -104,18 +71,9 @@ int main(void)
   MX_SPI1_Init();
 
   initSensors();
-  initAudioTimers();
-
   /* Initialize the LCD and show a splash screen */
   ILI9341_Init(&hspi1);
-#if !UI_DEMO
-  /* The UI shows its own title screen instead of this splash */
-  ILI9341_DrawString(18, 12, "GFX01M2 LCD DEMO", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawString(30, 40, "NUCLEO-L496ZG-P", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
-  HAL_Delay(2000);
-#endif
 
-#if UI_DEMO
   /* UI + pet logic loop. Each pass: read buttons, let the UI handle
    * navigation, pass the user's request to the pet logic, play the matching
    * animation only if the pet accepted it, advance the pet's timers, then
@@ -124,6 +82,9 @@ int main(void)
    * There is no microphone on the test board, so B1 in agent mode stands in
    * for "voice heard". */
   {
+    bool mic_listening = false;
+    uint32_t mic_started_ms = 0U;
+    uint32_t last_mic_check_ms = 0U;
     Pet_Init(HAL_GetTick());
     UI_Init();
     while (1)
@@ -135,10 +96,32 @@ int main(void)
 
       Input_Update(now);
       pressed = Input_GetPressed();
-      if ((UI_GetScreen() == UI_SCREEN_AGENT) && (pressed & INPUT_B1))
+      if (UI_GetScreen() == UI_SCREEN_AGENT)
       {
-        UI_NotifyVoice();
-        pressed &= (uint8_t)~INPUT_B1;
+        if (!mic_listening)
+        {
+          clearRecordedMicrophoneData();
+          startRecording();
+
+          mic_listening = true;
+          mic_started_ms = now;
+          last_mic_check_ms = now;
+        }
+        else if (((now - mic_started_ms) >= MIC_WARMUP_MS) &&
+                ((now - last_mic_check_ms) >= MIC_CHECK_INTERVAL_MS))
+        {
+          last_mic_check_ms = now;
+
+          if (Microphone_HeardSound())
+          {
+            UI_NotifyVoice();
+          }
+        }
+      }
+      else if (mic_listening)
+      {
+        stopRecording();
+        mic_listening = false;
       }
       request = UI_Update(now, pressed, Input_GetHeld());
 
@@ -167,182 +150,6 @@ int main(void)
       }
       UI_DrawMeters(Pet_GetFullness(), Pet_GetHappiness());
     }
-  }
-#endif
-
-  /* Infinite loop: cycle through the demo pages */
-  startAudio((int8_t*)&AUDIO_PERRY, AUDIO_PERRY_SAMPLES);
-  startRecording();
-  while (1)
-  {
-    MPU6050_data_t sensor_data;
-    MPU6050_getParsedData(&sensor_data);
-    __NOP(); // Breakpoint here to see sensor data
-
-    Demo_Microphone();
-
-    Demo_ColorBars();
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-    HAL_Delay(1500);
-
-    Demo_Shapes();
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-    HAL_Delay(1500);
-
-    Demo_Images();
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-    HAL_Delay(1500);
-
-    Demo_Text();
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-    HAL_Delay(1500);
-
-    Demo_Joystick();
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-  }
-}
-
-static void Demo_Microphone(void)
-{
-  float samples[190] = {0};
-  float prevsamples[190] = {0};
-
-  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  ILI9341_DrawString(18, 12, "MICROPHONE DEMO", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-
-  // Loop through 500 times since this requires polling and can't just have a HAL_Delay
-  for (int microphone_iter = 0; microphone_iter < 500; microphone_iter++) {
-    // Get data into samples
-    getRecordedMicrophoneData((float*)samples, 190);
-    // Scale samples for display
-    for (int i = 0; i < 190; i++) {
-      samples[i] *= 50;
-    }
-
-    // Rectangle around microphone box
-    ILI9341_DrawRect(25, 100, 190, 100, ILI9341_COLOR_WHITE);
-
-    // Clear previous iteration of samples
-    for (int i = 1; i < 190; i++) {
-      ILI9341_DrawLine(25 + i - 1, 150 - prevsamples[i - 1], 25 + i, 150 - prevsamples[i], ILI9341_COLOR_BLACK);
-    }
-
-    // 
-    for (int i = 1; i < 190; i++) {
-      ILI9341_DrawLine(25 + i - 1, 150 - samples[i - 1], 25 + i, 150 - samples[i], ILI9341_COLOR_CYAN);
-    }
-
-    for (int i = 1; i < 190; i++) {
-      prevsamples[i] = samples[i];
-      samples[i - 1] = samples[i];
-    }
-  }
-}
-
-/**
-  * @brief  Fills the screen with a set of vertical color bars.
-  */
-static void Demo_ColorBars(void)
-{
-  static const uint16_t colors[] =
-  {
-    ILI9341_COLOR_WHITE, ILI9341_COLOR_YELLOW, ILI9341_COLOR_CYAN, ILI9341_COLOR_GREEN,
-    ILI9341_COLOR_MAGENTA, ILI9341_COLOR_RED, ILI9341_COLOR_BLUE, ILI9341_COLOR_ORANGE
-  };
-  const uint16_t bar_count = sizeof(colors) / sizeof(colors[0]);
-  const uint16_t bar_width = ILI9341_WIDTH / bar_count;
-  uint16_t i;
-
-  for (i = 0; i < bar_count; i++)
-  {
-    ILI9341_FillRect((uint16_t)(i * bar_width), 0, bar_width, ILI9341_HEIGHT, colors[i]);
-  }
-}
-
-static void Demo_Images(void)
-{
-  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  // Render full-resolution 150x100 rickroll frame
-  ILI9341_DrawImage(50, 50, IMG_RICKROLL_WIDTH, IMG_RICKROLL_HEIGHT, (image_pixel_t*)&IMG_RICKROLL);
-  // Repeat with 5x scaled 30x20 image
-  ILI9341_DrawImageScaled(50, 150, IMG_SMALL_RICKROLL_WIDTH, IMG_SMALL_RICKROLL_HEIGHT, (image_pixel_t*)&IMG_SMALL_RICKROLL, 5);
-}
-
-static image_pixel_t translucent_shape[100][100];
-/**
-  * @brief  Draws a handful of filled and outlined shapes.
-  */
-static void Demo_Shapes(void)
-{
-  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-
-  ILI9341_FillRect(20, 20, 80, 60, ILI9341_COLOR_RED);
-  ILI9341_DrawRect(120, 20, 80, 60, ILI9341_COLOR_GREEN);
-
-  ILI9341_DrawLine(20, 110, 220, 110, ILI9341_COLOR_WHITE);
-  ILI9341_DrawLine(20, 110, 220, 260, ILI9341_COLOR_YELLOW);
-  ILI9341_DrawLine(220, 110, 20, 260, ILI9341_COLOR_CYAN);
-
-  ILI9341_FillRect(70, 220, 100, 40, ILI9341_COLOR_BLUE);
-  ILI9341_DrawRect(65, 215, 110, 50, ILI9341_COLOR_WHITE);
-
-  ILI9341_DrawRect(50, 50, 100, 100, ILI9341_COLOR_WHITE);
-
-  for (uint16_t row = 0; row < 100; row++) {
-    for (uint16_t col = 0; col < 100; col++) {
-      image_pixel_t curr_px;
-      curr_px.color = ILI9341_COLOR_ORANGE;
-      if (row > 33 && row < 67 && col > 33 && col < 67) {
-        curr_px.alpha = 0;
-      } else {
-        curr_px.alpha = 100;
-      }
-      translucent_shape[row][col] = curr_px;
-    }
-  }
-
-  ILI9341_DrawImage(50, 50, 100, 100, (image_pixel_t*)&translucent_shape);
-}
-
-/**
-  * @brief  Demonstrates text rendering at a few different sizes.
-  */
-static void Demo_Text(void)
-{
-  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-
-  ILI9341_DrawString(10, 20, "HELLO CLASS!", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 3);
-  ILI9341_DrawString(10, 60, "ILI9341 QVGA TFT", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawString(10, 90, "DRIVEN OVER SPI1", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawString(10, 130, "TRY CHANGING THE", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
-  ILI9341_DrawString(10, 145, "COLORS AND TEXT IN", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
-  ILI9341_DrawString(10, 160, "DEMO TEXT() IN MAIN.C", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
-}
-
-/**
-  * @brief  Live joystick (B1) status readout for a few seconds.
-  */
-static void Demo_Joystick(void)
-{
-  uint32_t start = HAL_GetTick();
-  char line[] = "L:_ C:_ D:_ R:_ U:_";
-
-  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  ILI9341_DrawString(10, 10, "JOYSTICK TEST", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawString(10, 40, "MOVE THE STICK (B1)", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
-
-  while ((HAL_GetTick() - start) < 5000U)
-  {
-    uint8_t joy = Joystick_Read();
-
-    line[2]  = (joy & JOY_LEFT_MASK)   ? '1' : '0';
-    line[6]  = (joy & JOY_CENTER_MASK) ? '1' : '0';
-    line[10] = (joy & JOY_DOWN_MASK)   ? '1' : '0';
-    line[14] = (joy & JOY_RIGHT_MASK)  ? '1' : '0';
-    line[18] = (joy & JOY_UP_MASK)     ? '1' : '0';
-
-    ILI9341_DrawString(10, 70, line, ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
-    HAL_Delay(50);
   }
 }
 
@@ -374,7 +181,13 @@ static void MX_SPI1_Init(void)
     Error_Handler();
   }
 }
+static bool Microphone_HeardSound(void)
+{
+  float peak_to_peak =
+      getMaxMicrophoneData() - getMinMicrophoneData();
 
+  return peak_to_peak >= MIC_SOUND_THRESHOLD;
+}
 /**
   * @brief System Clock Configuration
   * @retval None
