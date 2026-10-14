@@ -39,10 +39,12 @@
 #include "ui.h"
 #include "input.h"
 #include "pet.h"
+#include "audio.h"
 
 #define MIC_SOUND_THRESHOLD     1.0f
 #define MIC_WARMUP_MS           150U
 #define MIC_CHECK_INTERVAL_MS   50U
+#define MIC_AUDIO_COOLDOWN_MS   300U
 
 
 /* Private variables ---------------------------------------------------------*/
@@ -71,6 +73,7 @@ int main(void)
   MX_SPI1_Init();
 
   initSensors();
+  initAudioTimers();
   /* Initialize the LCD and show a splash screen */
   ILI9341_Init(&hspi1);
 
@@ -85,6 +88,7 @@ int main(void)
     bool mic_listening = false;
     uint32_t mic_started_ms = 0U;
     uint32_t last_mic_check_ms = 0U;
+    uint32_t last_audio_ms = 0U;
     Pet_Init(HAL_GetTick());
     UI_Init();
     while (1)
@@ -96,7 +100,20 @@ int main(void)
 
       Input_Update(now);
       pressed = Input_GetPressed();
-      if (UI_GetScreen() == UI_SCREEN_AGENT)
+      bool audio_playing = isAudioPlaying();
+
+      /*
+       * Do not let the microphone hear the board's own speaker.
+       * Keep resetting this timestamp for the entire playback.
+       */
+      if (audio_playing)
+      {
+        last_audio_ms = now;
+      }
+
+      if ((UI_GetScreen() == UI_SCREEN_AGENT) &&
+          !audio_playing &&
+          ((now - last_audio_ms) >= MIC_AUDIO_COOLDOWN_MS))
       {
         if (!mic_listening)
         {
@@ -108,7 +125,7 @@ int main(void)
           last_mic_check_ms = now;
         }
         else if (((now - mic_started_ms) >= MIC_WARMUP_MS) &&
-                ((now - last_mic_check_ms) >= MIC_CHECK_INTERVAL_MS))
+                 ((now - last_mic_check_ms) >= MIC_CHECK_INTERVAL_MS))
         {
           last_mic_check_ms = now;
 

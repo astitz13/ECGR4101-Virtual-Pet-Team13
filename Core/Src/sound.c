@@ -7,6 +7,7 @@
 #include "sound.h"
 #include "audio.h"
 #include <stddef.h>
+#include "imported_audio.h"
 
 typedef struct
 {
@@ -26,13 +27,36 @@ typedef struct
  * Keep clips short: about 16 KB of Flash per second of audio (16 kHz). */
 static const SoundClip sound_clips[SOUND_COUNT] =
 {
-  [SOUND_HAT_ON]    = { NULL, 0U, "HAT ON"    },
-  [SOUND_HAT_OFF]   = { NULL, 0U, "HAT OFF"   },
-  [SOUND_FEED]      = { NULL, 0U, "FEED"      },
-  [SOUND_HAPPY]     = { NULL, 0U, "HAPPY"     },
-  [SOUND_GAME_OVER] = { NULL, 0U, "GAME OVER" },
-};
+  [SOUND_HAT_ON] = {
+    .samples = AUDIO_HAT_ON,
+    .count = AUDIO_HAT_ON_SAMPLES,
+    .name = "HAT ON"
+  },
 
+  [SOUND_HAT_OFF] = {
+    .samples = AUDIO_HAT_OFF,
+    .count = AUDIO_HAT_OFF_SAMPLES,
+    .name = "HAT OFF"
+  },
+
+  [SOUND_FEED] = {
+    .samples = AUDIO_FEED,
+    .count = AUDIO_FEED_SAMPLES,
+    .name = "FEED"
+  },
+
+  [SOUND_HAPPY] = {
+    .samples = AUDIO_HAPPY,
+    .count = AUDIO_HAPPY_SAMPLES,
+    .name = "HAPPY"
+  },
+
+  [SOUND_GAME_OVER] = {
+    .samples = AUDIO_GAME_OVER,
+    .count = AUDIO_GAME_OVER_SAMPLES,
+    .name = "GAME OVER"
+  },
+};
 void Sound_Play(SoundCue cue)
 {
   if ((cue < SOUND_COUNT) && (sound_clips[cue].samples != NULL) && (sound_clips[cue].count > 0U))

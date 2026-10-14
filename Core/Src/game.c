@@ -2,6 +2,7 @@
 #include "ili9341.h"
 #include "imported_images.h"
 #include "mpu6050.h"
+#include "sound.h"
 
 #define GAME_BG_COLOR              ILI9341_COLOR_BLACK
 #define GAME_TEXT_COLOR            ILI9341_COLOR_WHITE
@@ -362,6 +363,11 @@ static void Game_Finish(GameResult result)
   game.object_active = false;
   game.waiting_for_spawn = false;
   game.result = result;
+  
+  if (result == GAME_RESULT_WIN)
+  {
+    Sound_Play(SOUND_HAPPY);
+  }
 
   Game_DrawResult(result);
 }
@@ -470,6 +476,7 @@ static void Game_AdvanceObject(uint32_t now_ms)
           game.fish_count++;
         }
 
+        Sound_Play(SOUND_FEED);
         Game_DrawPetFeedback(IMG_GAME_CATCH);
       }
       else
@@ -479,6 +486,7 @@ static void Game_AdvanceObject(uint32_t now_ms)
           game.bomb_count++;
         }
 
+        Sound_Play(SOUND_GAME_OVER);
         Game_DrawPetFeedback(IMG_GAME_HIT);
       }
 

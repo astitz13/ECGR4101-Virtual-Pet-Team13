@@ -16,6 +16,9 @@
 // Include timer PeriodElapsedCallback handler shared with microphone
 #include "timers_common.h"
 
+// include bolean data type
+#include <stdbool.h>
+
 
 // Function to initialize both timers (TIM16 and TIM17) for audio
 void initAudioTimers(void);
@@ -32,6 +35,8 @@ void TIM1_TRG_COM_TIM17_IRQHandler(void);
 void startAudio(int8_t *audio, size_t num_samples);
 // Stops all audio
 void stopAudio(void);
+// checks if audio is playing
+bool isAudioPlaying(void);
 
 // Internal function to adjust PWM duty cycle
 void adjustDutyCycle(float dutyCycle);

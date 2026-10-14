@@ -7,7 +7,14 @@ SAMPLE_RATE = 16000
 # File name should be the relative file name from this "Assets" directory
 # Sound name should be what is used to reference the sound in code
 # Proportion is the proportion of the audio to include (1 is full audio, 0.5 is half, etc.)
-SOUND_LIST = [("Perry the Platypus Theme (Midi by RedCubeObjectThingy51).mp3", "AUDIO_PERRY", 1)]
+SOUND_LIST = [
+    ("hat_on.mp3",    "AUDIO_HAT_ON",    1.0),
+    ("hat_off.mp3",   "AUDIO_HAT_OFF",   1.0),
+    ("feed.mp3",      "AUDIO_FEED",      1.0),
+    ("happy.mp3",     "AUDIO_HAPPY",     1.0),
+    ("game_over.mp3", "AUDIO_GAME_OVER", 1.0),
+    ("Perry the Platypus Theme (Midi by RedCubeObjectThingy51).mp3","AUDIO_PERRY",1.0),
+]
 
 # Relative paths to header and C files for audio import
 OUTPUT_HEADER_FILE = "../Core/Inc/imported_audio.h"

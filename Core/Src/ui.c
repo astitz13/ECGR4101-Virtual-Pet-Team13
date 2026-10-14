@@ -247,9 +247,18 @@ static void Sprite_DrawFrame(uint16_t x, uint16_t y,
 /* Idle: three normal frames followed by one blink. */
 static void Idle_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  const image_pixel_t *sprite =
-      (frame == 3U) ? IMG_PET_BLINK : IMG_PET_IDLE_0;
+  const image_pixel_t *sprite;
 
+  /*
+   * Frames 1 and 2 use the same image already displayed by frame 0,
+   * so do not send those pixels to the display again.
+   */
+  if ((frame == 1U) || (frame == 2U))
+  {
+    return;
+  }
+
+  sprite = (frame == 3U) ? IMG_PET_BLINK : IMG_PET_IDLE_0;
   Sprite_DrawFrame(x, y, sprite);
 }
 
@@ -283,9 +292,18 @@ static void HatOn_Draw(uint8_t frame, uint16_t x, uint16_t y)
 /* Agent-mode idle animation. */
 static void AgentIdle_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  const image_pixel_t *sprite =
-      (frame == 3U) ? IMG_AGENT_BLINK : IMG_AGENT_IDLE_0;
+  const image_pixel_t *sprite;
 
+  /*
+   * Frames 1 and 2 are identical to frame 0.
+   * Only redraw when blinking or returning from the blink.
+   */
+  if ((frame == 1U) || (frame == 2U))
+  {
+    return;
+  }
+
+  sprite = (frame == 3U) ? IMG_AGENT_BLINK : IMG_AGENT_IDLE_0;
   Sprite_DrawFrame(x, y, sprite);
 }
 

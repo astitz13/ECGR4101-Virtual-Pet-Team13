@@ -11,8 +11,8 @@ TIM_HandleTypeDef htim16;
 TIM_HandleTypeDef htim17;
 
 // Maintains state of audio playing
-int8_t *current_sample = NULL;
-size_t samples_remaining = 0;
+static int8_t * volatile current_sample = NULL;
+static volatile size_t samples_remaining = 0U;
 
 // Internal inline function for calculating duty cycle
 static inline int calculateDutyCycle(float dutyCycle)
@@ -118,15 +118,19 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* htim_pwm)
 // Callback for TIM17 to play samples
 void TIM17_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    if (htim->Instance == TIM17) {
+    if (htim->Instance == TIM17) 
+    {
         // Check if still playing audio and valid audio loaded
-        if (current_sample != NULL && samples_remaining > 0) {
+        if (current_sample != NULL && samples_remaining > 0) 
+        {
             // Adjust duty cycle based on current amplitude
             adjustDutyCycle(((int)*current_sample + 127) / 255.0f);
             // Go to next sample and keep track of number left
             current_sample++;
             samples_remaining--;
-        } else {
+        } 
+        else 
+        {
             // Stop audio if TIM17 still active and audio done
             stopAudio();
         }
@@ -151,13 +155,19 @@ void startAudio(int8_t *audio, size_t num_samples)
 }
 
 // Stops all audio
-void stopAudio(void) {
+void stopAudio(void) 
+{
     // Set no samples left and current sample to null pointer
     current_sample = NULL;
     samples_remaining = 0;
     // Stop TIM16 and TIM17
     HAL_TIM_PWM_Stop(&htim16, TIM_CHANNEL_1);
     HAL_TIM_Base_Stop_IT(&htim17);
+}
+
+bool isAudioPlaying(void)
+{
+    return (current_sample != NULL) && (samples_remaining > 0U);
 }
 
 // Adjust duty cycle of TIM16 dynamically
