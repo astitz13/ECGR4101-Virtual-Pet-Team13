@@ -11,10 +11,12 @@
  */
 #include "ui.h"
 #include "ili9341.h"
+#include "imported_images.h"
 #include "input.h"
 #include "anim.h"
 #include "sound.h"
 #include <string.h>
+#include "game.h"
 
 #define UI_BG_COLOR         ILI9341_COLOR_BLACK
 #define UI_TEXT_COLOR       ILI9341_COLOR_WHITE
@@ -220,85 +222,112 @@ static void Menu_Select(uint8_t index)
 #define HAT_OFF_FRAMES      2U   /* hat_4, hat_2 */
 #define DEAD_FRAMES         2U   /* ghost_0, ghost_1 */
 #define RUNAWAY_FRAMES      4U   /* agent_idle_0, poof_0, poof_1, (empty box) */
+#define PET_SPRITE_SCALE    3U
 
-/* Label of the placeholder currently drawn, so an unchanged label is not
- * redrawn every frame (keeps the main loop fast). NULL = box needs drawing. */
-static const char *placeholder_label;
-
-static void Placeholder_DrawFrame(uint16_t x, uint16_t y, const char *label)
+static void Sprite_DrawFrame(uint16_t x, uint16_t y,
+                             const image_pixel_t *pixels)
 {
-  uint16_t label_w = (uint16_t)(strlen(label) * UI_CHAR_W(UI_TEXT_SIZE));
-  uint16_t note_w = (uint16_t)(strlen("ANIMATION") * UI_CHAR_W(1U));
+  uint16_t sprite_w = IMG_PET_IDLE_0_WIDTH * PET_SPRITE_SCALE;
+  uint16_t sprite_h = IMG_PET_IDLE_0_HEIGHT * PET_SPRITE_SCALE;
+  uint16_t sprite_x = x + (PET_ANIM_W - sprite_w) / 2U;
+  uint16_t sprite_y = y + (PET_ANIM_H - sprite_h) / 2U;
 
-  if (label == placeholder_label)
-  {
-    return;
-  }
-  placeholder_label = label;
-
+  /* Remove the previous frame so transparent pixels do not leave trails. */
   ILI9341_FillRect(x, y, PET_ANIM_W, PET_ANIM_H, UI_BG_COLOR);
-  ILI9341_DrawRect(x, y, PET_ANIM_W, PET_ANIM_H, UI_HINT_COLOR);
-  ILI9341_DrawString((uint16_t)(x + (PET_ANIM_W - label_w) / 2U), (uint16_t)(y + 34U), label,
-                     ILI9341_COLOR_ORANGE, UI_BG_COLOR, UI_TEXT_SIZE);
-  ILI9341_DrawString((uint16_t)(x + (PET_ANIM_W - note_w) / 2U), (uint16_t)(y + 56U), "ANIMATION",
-                     UI_HINT_COLOR, UI_BG_COLOR, 1U);
+
+  ILI9341_DrawImageScaled(
+      sprite_x,
+      sprite_y,
+      IMG_PET_IDLE_0_WIDTH,
+      IMG_PET_IDLE_0_HEIGHT,
+      (image_pixel_t *)pixels,
+      PET_SPRITE_SCALE);
 }
 
-/* Idle (loops) */
+/* Idle: three normal frames followed by one blink. */
 static void Idle_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "IDLE");
+  const image_pixel_t *sprite =
+      (frame == 3U) ? IMG_PET_BLINK : IMG_PET_IDLE_0;
+
+  Sprite_DrawFrame(x, y, sprite);
 }
 
-/* Eating, after each accepted feed (plays once) */
+/* Eating. */
 static void Eat_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "EATING");
+  const image_pixel_t *sprite =
+      ((frame & 1U) == 0U) ? IMG_FEED_OPEN : IMG_FEED_CHEW;
+
+  Sprite_DrawFrame(x, y, sprite);
 }
 
-/* Happy, after playing (plays once) */
+/* Happy animation. */
 static void Happy_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "HAPPY");
+  const image_pixel_t *sprite =
+      ((frame & 1U) == 0U) ? IMG_HAPPY_0 : IMG_HAPPY_1;
+
+  Sprite_DrawFrame(x, y, sprite);
 }
 
-/* Agent mode starts: hat goes on (plays once) */
+/* Hat goes on. */
 static void HatOn_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "HAT ON");
+  const image_pixel_t *sprite =
+      (frame == 0U) ? IMG_HAT_2 : IMG_HAT_4;
+
+  Sprite_DrawFrame(x, y, sprite);
 }
 
-/* Agent mode idle, hat on (loops) */
+/* Agent-mode idle animation. */
 static void AgentIdle_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "AGENT");
+  const image_pixel_t *sprite =
+      (frame == 3U) ? IMG_AGENT_BLINK : IMG_AGENT_IDLE_0;
+
+  Sprite_DrawFrame(x, y, sprite);
 }
 
-/* Called back out of agent mode: hat comes off (plays once) */
+/* Hat comes off in reverse order. */
 static void HatOff_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "HAT OFF");
+  const image_pixel_t *sprite =
+      (frame == 0U) ? IMG_HAT_4 : IMG_HAT_2;
+
+  Sprite_DrawFrame(x, y, sprite);
 }
 
-/* Dead: ghost with halo (loops) */
+/* Dead/ghost animation. */
 static void Dead_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "DEAD");
+  const image_pixel_t *sprite =
+      ((frame & 1U) == 0U) ? IMG_GHOST_0 : IMG_GHOST_1;
+
+  Sprite_DrawFrame(x, y, sprite);
 }
 
-/* Ran away: agent vanishes in a puff of smoke (plays once; last frame is an
- * empty box and stays on screen) */
+/* Perry disappears in a puff of smoke. */
 static void RunAway_Draw(uint8_t frame, uint16_t x, uint16_t y)
 {
-  (void)frame;
-  Placeholder_DrawFrame(x, y, "RUN AWAY");
+  switch (frame)
+  {
+    case 0U:
+      Sprite_DrawFrame(x, y, IMG_AGENT_IDLE_0);
+      break;
+
+    case 1U:
+      Sprite_DrawFrame(x, y, IMG_POOF_0);
+      break;
+
+    case 2U:
+      Sprite_DrawFrame(x, y, IMG_POOF_1);
+      break;
+
+    default:
+      ILI9341_FillRect(x, y, PET_ANIM_W, PET_ANIM_H, UI_BG_COLOR);
+      break;
+  }
 }
 
 static const Animation anim_idle       = { Idle_Draw,      IDLE_FRAMES,    300U, 1U };
@@ -372,10 +401,7 @@ static void Screen_DrawBody(void)
       break;
 
     case UI_SCREEN_GAME:
-      UI_DrawCentered(UI_TITLE_Y, "GAME", UI_TEXT_COLOR, UI_TEXT_SIZE);
-      ILI9341_DrawRect(PET_AREA_X, PET_AREA_Y, PET_AREA_W, PET_AREA_H, UI_HINT_COLOR);
-      UI_DrawCentered(UI_PROMPT_Y, "CENTER: PLAY", UI_TEXT_COLOR, UI_TEXT_SIZE);
-      UI_DrawCentered(UI_HINT_Y, "LEFT: BACK", UI_HINT_COLOR, UI_TEXT_SIZE);
+      /* Game_Start() draws the complete game screen. */
       break;
 
     case UI_SCREEN_DEAD:
@@ -409,7 +435,6 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
   }
   screen = next;
   Anim_Stop(&pet_anim);
-  placeholder_label = NULL;
   last_input_ms = ui_now_ms;   /* agent-mode countdown restarts on every screen change */
   voice_pending = 0U;
 
@@ -430,7 +455,7 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
 
   /* Screens with a pet area start out with the idle animation;
    * game-over screens play their own animation */
-  if ((next == UI_SCREEN_PET) || (next == UI_SCREEN_FEED) || (next == UI_SCREEN_GAME))
+  if ((next == UI_SCREEN_PET) || (next == UI_SCREEN_FEED))
   {
     Anim_Start(&pet_anim, &anim_idle, PET_ANIM_X, PET_ANIM_Y, ui_now_ms);
   }
@@ -445,6 +470,10 @@ static void Screen_Show(UiScreen next, uint8_t full_redraw)
   else if (next == UI_SCREEN_RAN_AWAY)
   {
     Anim_Start(&pet_anim, &anim_runaway, PET_ANIM_X, GAMEOVER_ANIM_Y, ui_now_ms);
+  }
+  else if (next == UI_SCREEN_GAME)
+  {
+    Game_Start(ui_now_ms);
   }
 }
 
@@ -625,15 +654,30 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
       break;
 
     case UI_SCREEN_GAME:
-      if (pressed & INPUT_CENTER)
+    {
+      GameResult game_result = Game_Update(now_ms);
+
+      if (game_result == GAME_RESULT_WIN)
       {
-        request = UI_REQUEST_PLAY;
+        request = UI_REQUEST_GAME_WIN;
       }
+      else if (game_result == GAME_RESULT_LOSS)
+      {
+        request = UI_REQUEST_GAME_LOSS;
+      }
+
       if (pressed & INPUT_LEFT)
       {
         Screen_Show(UI_SCREEN_PET, 0U);
       }
+      else if ((pressed & INPUT_CENTER) &&
+              Game_IsFinished())
+      {
+        Game_Start(now_ms);
+      }
+
       break;
+    }
 
     case UI_SCREEN_DEAD:
     case UI_SCREEN_RAN_AWAY:

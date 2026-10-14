@@ -127,16 +127,40 @@ int main(void)
 
       switch (request)
       {
-        case UI_REQUEST_FEED:    accepted = Pet_DoAction(PET_ACTION_FEED, now); break;
-        case UI_REQUEST_PLAY:    accepted = Pet_DoAction(PET_ACTION_PLAY, now); break;
-        case UI_REQUEST_VOICE:   accepted = Pet_DoAction(PET_ACTION_TALK, now); break;
-        case UI_REQUEST_RESTART: Pet_Reset(now); break;
-        default: break;
+        case UI_REQUEST_FEED:
+          accepted = Pet_DoAction(PET_ACTION_FEED, now);
+          break;
+
+        case UI_REQUEST_PLAY:
+          accepted = Pet_DoAction(PET_ACTION_PLAY, now);
+          break;
+
+        case UI_REQUEST_VOICE:
+          accepted = Pet_DoAction(PET_ACTION_TALK, now);
+          break;
+
+        case UI_REQUEST_RESTART:
+          Pet_Reset(now);
+          break;
+
+        case UI_REQUEST_GAME_WIN:
+          accepted = Pet_ApplyGameResult(true, now);
+          break;
+
+        case UI_REQUEST_GAME_LOSS:
+          accepted = Pet_ApplyGameResult(false, now);
+          break;
+
+        default:
+          break;
       }
       if (accepted)
       {
         UI_PlayAction(request);
       }
+
+      /* Pause meter decay while the game screen is active. */
+      Pet_SetPaused(UI_GetScreen() == UI_SCREEN_GAME, now);
 
       Pet_Update(now);
 
@@ -171,7 +195,7 @@ static void MX_SPI1_Init(void)
    * DIV4 - see SystemClock_Config). /32 keeps the same ~1.775 MHz target
    * that gave comfortable margin over the ILI9341's 10 MHz write ceiling
    * on this jumper-wired, unsupported-board setup. */
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;

@@ -10,6 +10,7 @@ typedef struct
   uint8_t fullness;
   uint8_t happiness;
   bool demo_mode;
+  bool paused;
 
   /* Current visual/behavioral state and the time it began. */
   PetState state;
@@ -73,6 +74,7 @@ void Pet_Init(uint32_t now_ms)
   pet.state_start_ms = now_ms;
   pet.last_fullness_decay_ms = now_ms;
   pet.last_happiness_decay_ms = now_ms;
+  pet.paused = false;
 }
 
 void Pet_Update(uint32_t now_ms)
@@ -80,7 +82,7 @@ void Pet_Update(uint32_t now_ms)
   uint32_t elapsed_fullness_ms;
   uint32_t elapsed_happiness_ms;
 
-  if ((pet.state == PET_STATE_DEAD) || (pet.state == PET_STATE_RAN_AWAY))
+  if ((pet.paused) || (pet.state == PET_STATE_DEAD) || (pet.state == PET_STATE_RAN_AWAY))
   {
     /* Terminal states do not decay and must be reset explicitly. */
     return;
@@ -175,27 +177,54 @@ bool Pet_DoAction(PetAction action, uint32_t now_ms)
   return true;
 }
 
-bool Pet_AwardGameHappiness(uint8_t score, uint8_t max_score, uint32_t now_ms)
+bool Pet_ApplyGameResult(bool won, uint32_t now_ms)
 {
-  uint32_t reward;
-
-  if ((max_score == 0U) || (pet.state == PET_STATE_DEAD) ||
+  if ((pet.state == PET_STATE_DEAD) ||
       (pet.state == PET_STATE_RAN_AWAY))
   {
     return false;
   }
 
-  /* Clamp an accidental score above max_score before scaling the reward. */
-  if (score > max_score)
+  if (won)
   {
-    score = max_score;
+    Pet_IncreaseValue(
+        &pet.happiness,
+        PET_GAME_HAPPINESS_CHANGE);
+  }
+  else
+  {
+    Pet_DecreaseValue(
+        &pet.happiness,
+        PET_GAME_HAPPINESS_CHANGE);
   }
 
-  reward = ((uint32_t)score * PET_GAME_MAX_HAPPINESS_REWARD) / max_score;
-  Pet_IncreaseValue(&pet.happiness, reward);
-  pet.state = PET_STATE_PLAYING;
-  pet.state_start_ms = now_ms;
+  Pet_CheckTerminalState(now_ms);
+
+  if ((pet.state != PET_STATE_DEAD) &&
+      (pet.state != PET_STATE_RAN_AWAY))
+  {
+    pet.state = PET_STATE_IDLE;
+    pet.state_start_ms = now_ms;
+  }
+
   return true;
+}
+
+void Pet_SetPaused(bool paused, uint32_t now_ms)
+{
+  if (pet.paused == paused)
+  {
+    return;
+  }
+
+  pet.paused = paused;
+
+  /*
+   * Reset both timestamps so time spent in the game is discarded instead
+   * of being applied as delayed decay after leaving.
+   */
+  pet.last_fullness_decay_ms = now_ms;
+  pet.last_happiness_decay_ms = now_ms;
 }
 
 void Pet_SetDemoMode(bool enabled, uint32_t now_ms)

@@ -22,9 +22,9 @@
 #define PET_DEMO_FULLNESS_DECAY_INTERVAL_MS 250U
 #define PET_DEMO_HAPPINESS_DECAY_INTERVAL_MS 333U
 #define PET_FEED_FULLNESS_CHANGE       10U
-#define PET_PLAY_HAPPINESS_CHANGE     15U
+#define PET_PLAY_HAPPINESS_CHANGE     10U
 #define PET_TALK_HAPPINESS_CHANGE     15U
-#define PET_GAME_MAX_HAPPINESS_REWARD 15U
+#define PET_GAME_HAPPINESS_CHANGE     10U
 #define PET_ACTION_DURATION_MS        1500U
 
 /* States that the UI can use to select a sprite or animation. */
@@ -61,12 +61,14 @@ void Pet_Update(uint32_t now_ms);
  */
 bool Pet_DoAction(PetAction action, uint32_t now_ms);
 
-/**
- * Award happiness after the Catch Game. A perfect score earns
- * PET_GAME_MAX_HAPPINESS_REWARD; lower scores earn a proportional amount.
- * Returns false if the pet has died or run away, or if max_score is zero.
+/*
+ * Pauses fullness and happiness decay. Resuming resets the decay timestamps
+ * so time spent paused is not applied later.
  */
-bool Pet_AwardGameHappiness(uint8_t score, uint8_t max_score, uint32_t now_ms);
+void Pet_SetPaused(bool paused, uint32_t now_ms);
+
+/* Applies +10 happiness for a win or -10 for a loss. */
+bool Pet_ApplyGameResult(bool won, uint32_t now_ms);
 
 /**
  * Enable or disable fast decay for a presentation/demo. Changing modes resets

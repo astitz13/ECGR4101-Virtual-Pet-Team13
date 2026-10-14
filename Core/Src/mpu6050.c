@@ -11,12 +11,12 @@ static I2C_HandleTypeDef hi2c1;
 
 // Write bytes to MPU6050 register over I2C
 void MPU6050_writeBytes(MPU6050_register_t reg, uint16_t len, uint8_t *data) {
-    HAL_I2C_Mem_Write(&hi2c1, MPU6050_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, data, len, 1);
+    HAL_I2C_Mem_Write(&hi2c1, MPU6050_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, data, len, 100);
 }
 
 // Read bytes from MPU6050 register
 void MPU6050_readBytes(MPU6050_register_t reg, uint16_t len, uint8_t *data) {
-    HAL_I2C_Mem_Read(&hi2c1, MPU6050_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, data, len, 1);
+    HAL_I2C_Mem_Read(&hi2c1, MPU6050_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, data, len, 100);
 }
 
 // Initialize MPU6050

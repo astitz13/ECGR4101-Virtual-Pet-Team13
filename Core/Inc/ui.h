@@ -32,7 +32,9 @@ typedef enum
   UI_REQUEST_FEED,      /* user fed the pet once (one B1 tap) */
   UI_REQUEST_PLAY,      /* user played with the pet once */
   UI_REQUEST_VOICE,     /* a voice called the pet back out of agent mode */
-  UI_REQUEST_RESTART    /* user held CENTER on the dead/ran-away screen */
+  UI_REQUEST_RESTART,   /* user held CENTER on the dead/ran-away screen */
+  UI_REQUEST_GAME_WIN,  /* user wins game */
+  UI_REQUEST_GAME_LOSS  /* user loses game */
 } UiRequest;
 
 /* Clears the screen and shows the title screen, which moves on to the main
