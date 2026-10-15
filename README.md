@@ -29,3 +29,11 @@ Perry’s fullness and happiness change over time and through user interactions.
        alt="Software Architecture"
        width="900">
 </p>
+
+# Team Members
+- Full name
+  - Dylan Hull
+  - Gabriel Almodovar
+  - Luke Robinson
+  - Austin Stitz
+  - Austin Stoeckert
