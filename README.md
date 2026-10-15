@@ -21,3 +21,6 @@ Menu navigation
 Feeding and playing
 Agent-mode voice interaction
 Tilting to move between game lanes
+
+# Software Architecture
+<img width="1126" height="1397" alt="image" src="https://github.com/user-attachments/assets/30d98913-0cbb-4cdb-9cf9-5ce1ac4464ad" />
