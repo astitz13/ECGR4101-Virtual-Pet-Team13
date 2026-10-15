@@ -167,6 +167,17 @@ int main(void)
         case UI_REQUEST_GAME_LOSS:
           accepted = Pet_ApplyGameResult(false, now);
           break;
+              case UI_REQUEST_DEBUG_DEATH:
+          accepted = Pet_ForceTerminalState(
+              PET_STATE_DEAD,
+              now);
+        break;
+
+        case UI_REQUEST_DEBUG_RUNAWAY:
+          accepted = Pet_ForceTerminalState(
+              PET_STATE_RAN_AWAY,
+              now);
+        break;
 
         default:
           break;

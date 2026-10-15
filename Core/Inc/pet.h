@@ -77,6 +77,9 @@ bool Pet_ApplyGameResult(bool won, uint32_t now_ms);
 void Pet_SetDemoMode(bool enabled, uint32_t now_ms);
 bool Pet_IsDemoMode(void);
 
+/* Debug helper: immediately forces death or runaway. */
+bool Pet_ForceTerminalState(PetState state, uint32_t now_ms);
+
 /** Restart the pet after it has died or run away. */
 void Pet_Reset(uint32_t now_ms);
 

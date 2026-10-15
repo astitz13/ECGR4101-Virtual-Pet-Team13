@@ -243,6 +243,30 @@ bool Pet_IsDemoMode(void)
   return pet.demo_mode;
 }
 
+bool Pet_ForceTerminalState(PetState state, uint32_t now_ms)
+{
+  if ((state != PET_STATE_DEAD) &&
+      (state != PET_STATE_RAN_AWAY))
+  {
+    return false;
+  }
+
+  if (state == PET_STATE_DEAD)
+  {
+    pet.fullness = PET_VALUE_MIN;
+  }
+  else
+  {
+    pet.happiness = PET_VALUE_MIN;
+  }
+
+  pet.state = state;
+  pet.state_start_ms = now_ms;
+  pet.paused = false;
+
+  return true;
+}
+
 void Pet_Reset(uint32_t now_ms)
 {
   /* Reset currently restores the same healthy starting values as power-on. */

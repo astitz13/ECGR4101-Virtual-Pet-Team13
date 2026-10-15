@@ -22,6 +22,7 @@ typedef enum
   UI_SCREEN_MENU,       /* action list with highlighted selection */
   UI_SCREEN_FEED,       /* feeding: B1 taps feed the pet */
   UI_SCREEN_GAME,       /* play/game action */
+  UI_SCREEN_DEBUG,       /* Debug mode for testing */
   UI_SCREEN_DEAD,       /* pet died of hunger */
   UI_SCREEN_RAN_AWAY    /* pet ran away from unhappiness */
 } UiScreen;
@@ -29,12 +30,14 @@ typedef enum
 typedef enum
 {
   UI_REQUEST_NONE,
-  UI_REQUEST_FEED,      /* user fed the pet once (one B1 tap) */
-  UI_REQUEST_PLAY,      /* user played with the pet once */
-  UI_REQUEST_VOICE,     /* a voice called the pet back out of agent mode */
-  UI_REQUEST_RESTART,   /* user held CENTER on the dead/ran-away screen */
-  UI_REQUEST_GAME_WIN,  /* user wins game */
-  UI_REQUEST_GAME_LOSS  /* user loses game */
+  UI_REQUEST_FEED,          /* user fed the pet once (one B1 tap) */
+  UI_REQUEST_PLAY,          /* user played with the pet once */
+  UI_REQUEST_VOICE,         /* a voice called the pet back out of agent mode */
+  UI_REQUEST_RESTART,       /* user held CENTER on the dead/ran-away screen */
+  UI_REQUEST_GAME_WIN,      /* user wins game */
+  UI_REQUEST_GAME_LOSS,      /* user loses game */
+  UI_REQUEST_DEBUG_DEATH,   /* Debug forces death */
+  UI_REQUEST_DEBUG_RUNAWAY  /* debug forces flee */
 } UiRequest;
 
 /* Clears the screen and shows the title screen, which moves on to the main

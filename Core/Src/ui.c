@@ -78,7 +78,7 @@
 #define RESTART_BAR_W       200U   /* inner width */
 #define RESTART_BAR_H       12U
 
-static const char *const menu_items[] = { "FEED", "GAME" };
+static const char *const menu_items[] = { "FEED", "GAME", "DEBUG" };
 #define MENU_COUNT          ((uint8_t)(sizeof(menu_items) / sizeof(menu_items[0])))
 
 static UiScreen screen = UI_SCREEN_PET;
@@ -438,6 +438,13 @@ static void Screen_DrawBody(void)
       Restart_DrawBar();
       break;
 
+    case UI_SCREEN_DEBUG:
+      UI_DrawCentered(UI_TITLE_Y,"DEBUG",ILI9341_COLOR_ORANGE,UI_TEXT_SIZE);
+      UI_DrawCentered(130U,"UP: FORCE DEATH",UI_TEXT_COLOR,1U);
+      UI_DrawCentered(165U,"DOWN: FORCE FLEE",UI_TEXT_COLOR,1U);
+      UI_DrawCentered(UI_HINT_Y,"LEFT: BACK",UI_HINT_COLOR,UI_TEXT_SIZE);
+    break;
+
     default:
       break;
   }
@@ -656,7 +663,18 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
       }
       else if (pressed & INPUT_CENTER)
       {
-        Screen_Show((menu_index == 0U) ? UI_SCREEN_FEED : UI_SCREEN_GAME, 0U);
+        if (menu_index == 0U)
+        {
+          Screen_Show(UI_SCREEN_FEED, 0U);
+        }
+        else if (menu_index == 1U)
+        {
+          Screen_Show(UI_SCREEN_GAME, 0U);
+        }
+        else
+        {
+          Screen_Show(UI_SCREEN_DEBUG, 0U);
+        }
       }
       break;
 
@@ -696,7 +714,21 @@ UiRequest UI_Update(uint32_t now_ms, uint8_t pressed, uint8_t held)
 
       break;
     }
-
+    case UI_SCREEN_DEBUG:
+      if (pressed & INPUT_UP)
+      {
+        request = UI_REQUEST_DEBUG_DEATH;
+      }
+      else if (pressed & INPUT_DOWN)
+      {
+        request = UI_REQUEST_DEBUG_RUNAWAY;
+      }
+      else if (pressed & INPUT_LEFT)
+      {
+        Screen_Show(UI_SCREEN_MENU, 0U);
+      }
+      break;
+    
     case UI_SCREEN_DEAD:
     case UI_SCREEN_RAN_AWAY:
       if (Restart_UpdateHold(now_ms, held))
